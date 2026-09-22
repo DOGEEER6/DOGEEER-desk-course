@@ -4,6 +4,7 @@ import { useApp } from '../store'
 import type { Weekday } from '../types'
 import { parseTimetableFile, type ParseResult } from '../lib/excel'
 import { downloadTemplate } from '../lib/template'
+import { onNativeFileDrop } from '../lib/desktop'
 import { WEEKDAY_LABELS } from '../types'
 import { Icon, Switch } from './ui'
 import { toast } from '../lib/toast'
@@ -341,9 +342,11 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
 /**
  * 全窗口拖放导入。
  *
- * 关键：这个遮罩**必须默认不可见且不接收指针事件**，
- * 否则它会盖住整个界面，让课表卡片的点击/拖动全部失效。
- * 只有在真正发生文件拖入（dataTransfer 里带 Files）时才显示并接管事件。
+ * 两个要点：
+ * 1. 遮罩**必须默认不可见且不接收指针事件**，否则它会盖住整个界面，
+ *    让课表卡片的点击/拖动全部失效。
+ * 2. 桌面端（Tauri）窗口会把 OS 级文件拖放吞掉，HTML5 的 drop 收不到文件，
+ *    因此额外监听原生 drag-drop 事件并用 fs 插件读文件。
  */
 export function ImportDropOverlay({ onFile }: { onFile: (f: File) => void }) {
   const [active, setActive] = useState(false)
@@ -375,6 +378,27 @@ export function ImportDropOverlay({ onFile }: { onFile: (f: File) => void }) {
       window.removeEventListener('dragend', onDrop)
     }
   }, [])
+
+  // 桌面端：原生拖放
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    let cancelled = false
+    void onNativeFileDrop({
+      onEnter: () => setActive(true),
+      onLeave: () => setActive(false),
+      onFile: ({ name, data }) => {
+        setActive(false)
+        onFile(new File([data], name))
+      },
+    }).then((fn) => {
+      if (cancelled) fn()
+      else unlisten = fn
+    })
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [onFile])
 
   return (
     <div

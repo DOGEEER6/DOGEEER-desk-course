@@ -12,7 +12,7 @@ interface Internals {
 
 interface TauriGlobal {
   core?: { invoke?: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }
-  window?: { getCurrentWindow?: () => { hide?: () => Promise<void> } }
+  window?: { getCurrentWindow?: () => unknown }
 }
 
 function internals(): Internals | undefined {
@@ -58,11 +58,70 @@ export const appVersion = () => call<string>('app_version')
 
 /** 隐藏当前窗口（浮窗自己的关闭按钮） */
 export async function hideCurrentWindow(): Promise<void> {
-  const win = tauriGlobal()?.window?.getCurrentWindow?.()
+  const w = tauriGlobal()?.window
+  const win = w?.getCurrentWindow?.() as { hide?: () => Promise<void> } | undefined
   if (win?.hide) {
     await win.hide()
     return
   }
   const ok = await call<void>('hide_mini')
   if (ok == null) window.close()
+}
+
+/* ------------------------------------------------------------------ */
+/* 原生文件拖放（桌面端）                                               */
+/* ------------------------------------------------------------------ */
+
+export interface NativeFileDrop {
+  name: string
+  data: ArrayBuffer
+}
+
+/**
+ * Tauri 的窗口会把 OS 级文件拖放「吞掉」（dragDropEnabled），
+ * 所以 HTML5 的 drop 事件在桌面端收不到文件，必须监听原生事件。
+ */
+export async function onNativeFileDrop(handlers: {
+  onEnter?: () => void
+  onLeave?: () => void
+  onFile: (file: NativeFileDrop) => void
+}): Promise<() => void> {
+  const w = tauriGlobal()?.window
+  const win = w?.getCurrentWindow?.() as
+    | { onDragDropEvent?: (cb: (e: { payload: { type: string; paths?: string[] } }) => void) => Promise<() => void> }
+    | undefined
+  if (!win?.onDragDropEvent) return () => {}
+
+  let readFile: ((p: string) => Promise<Uint8Array>) | null = null
+  try {
+    const mod = await import('@tauri-apps/plugin-fs')
+    readFile = (p: string) => mod.readFile(p)
+  } catch {
+    console.warn('[desktop] 未安装 @tauri-apps/plugin-fs，桌面端拖放导入不可用')
+  }
+
+  const unlisten = await win.onDragDropEvent(async (event) => {
+    const p = event.payload
+    if (p.type === 'enter' || p.type === 'over') {
+      handlers.onEnter?.()
+      return
+    }
+    if (p.type === 'leave') {
+      handlers.onLeave?.()
+      return
+    }
+    if (p.type === 'drop') {
+      handlers.onLeave?.()
+      const path = p.paths?.[0]
+      if (!path || !readFile) return
+      try {
+        const bytes = await readFile(path)
+        const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        handlers.onFile({ name: path.split(/[\\/]/).pop() ?? 'timetable.xlsx', data: ab })
+      } catch (err) {
+        console.warn('[desktop] 读取拖入的文件失败', err)
+      }
+    }
+  })
+  return unlisten
 }

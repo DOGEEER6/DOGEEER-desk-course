@@ -9,7 +9,7 @@
 | | 能力 |
 |---|---|
 | 🪟 **极简桌面浮窗** | 常驻桌面、始终置顶、无边框。**只显示今天**：今日课程 + 全部作业 DDL 汇总；点击课程卡片展开教师/地点/该课作业与截止时间；点「打开完整课表」进入主界面。可拖动、可隐藏、支持**开机自启（开机只显示浮窗）** |
-| 📥 **Excel 导入** | 自动识别「网格课表」与「课程清单」两种格式；单元格里 `课程名 / 教师（1-16周） / 地点` 会被自动拆开；周次支持 `1-16`、`1,3,5`、`第1-8周`、`单周`、`双周`、`每周`。课表**按周次区分**，每周显示的内容可以完全不同 |
+| 📥 **Excel 导入** | 自动识别「网格课表」与「课程清单」两种格式；单元格里 `课程名 / 教师（1-16周） / 地点` 会被自动拆开；周次支持 `1-16`、`1,3,5`、`第1-8周`、`单周`、`双周`、`每周`。课表**按周次区分**，每周显示的内容可以完全不同。也支持把文件直接拖进窗口（桌面端走原生拖放） |
 | 🔔 **开课提醒** | 应用内横幅 + 系统通知 + 合成提示音；可设置提前 5/10/15/30 分钟或自定义；作业 DDL 临期与逾期也会提醒 |
 | ✋ **拖动改课** | 直接拖动卡片移动课程；拖动上下边缘拉长/缩短；松开自动吸附到节次网格，并显示吸附辅助框；同一时段重复会按周次自动合并 |
 | 📝 **课程详情** | 点击课程打开右侧抽屉：上课时段编辑、周次选择器、教师/地点/学分、11 种 iOS 配色 |
@@ -57,27 +57,79 @@
 - **Tailwind CSS v4** + 自定义材质 `/src/index.css`
 - **Framer Motion** 负责所有弹簧动画
 - **SheetJS (xlsx)** 负责 Excel 解析与模板导出
+- **tauri-plugin-notification / autostart / fs** 负责系统通知、开机自启、原生拖放文件读取
 - 图标为**脚本生成**（`scripts/gen-icons.mjs`，零依赖纯 Node 实现 PNG/ICO 编码）
 
-> 前端是完全独立的，可直接 `npm run dev` 在浏览器里预览全部功能（除系统通知）。
+> 前端是完全独立的，可直接 `npm run dev` 在浏览器里预览大部分功能（除系统通知、浮窗、原生拖放）。
+
+## 构建产物
+
+| 产物 | 路径 | 大小 |
+|---|---|---|
+| 安装程序（NSIS，当前用户免管理员） | `src-tauri/target/release/bundle/nsis/Lumen课程表_0.1.0_x64-setup.exe` | ~1.5 MB |
+| 免安装可执行文件 | `src-tauri/target/release/desk-course.exe` | ~4 MB |
+
+> 首次 `npm run app:build` 时 Tauri 会从 GitHub 下载 NSIS（约 2.3MB）。国内网络可能超时，
+> 可先用镜像预置到缓存目录，再重新执行打包：
+>
+> ```powershell
+> $zip = "$env:TEMP\nsis-3.11.zip"
+> Start-BitsTransfer -Source "https://ghfast.top/https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.11/nsis-3.11.zip" -Destination $zip
+> Remove-Item "$env:LOCALAPPDATA\tauri\NSIS" -Recurse -Force -ErrorAction SilentlyContinue
+> Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\tauri\NSIS" -Force
+> ```
 
 ## 开发
 
 ```bash
 npm install
-npm run dev          # 浏览器预览 http://127.0.0.1:5183
-npm run app:dev      # Tauri 桌面开发模式（需要 Rust）
+npm run dev          # 浏览器预览 http://127.0.0.1:5183（可验证除系统通知/浮窗外的全部功能）
+npm run app:dev      # Tauri 桌面开发模式
 npm run app:build    # 打包 NSIS 安装包
-npm run build        # 仅构建前端
+npm run build        # 仅构建前端（主窗口 + 浮窗两个入口）
+
+node scripts/selftest.mjs "课表.xlsx"   # 解析器 + 吸附算法自测（35 项）
+node scripts/e2e.mjs "课表.xlsx"        # 端到端验收（注入课表 → 断言 → 截图）
 ```
 
-### Rust 工具链（Windows）
+### Rust 工具链（Windows，国内网络）
 
-本项目使用 **GNU 工具链**，无需安装庞大的 MSVC Build Tools：
+本机实测有两个坑，`scripts/setup-windows.ps1` 会自动检查：
 
-1. 安装 rustup（默认 host 选 `x86_64-pc-windows-gnu`）
-2. 需要 MinGW-w64 的 `gcc` 作为链接器（`src-tauri/.cargo/config.toml` 已指向 `C:/msys64/mingw64/bin/gcc.exe`，路径不同请自行修改）
-3. 国内网络可参考 `src-tauri/.cargo/config.toml` 里的 TUNA crates 镜像配置
+1. **`static.crates.io` 下载只有 ~1KB/s** → `src-tauri/.cargo/config.toml` 里把索引与
+   crate 文件都切到 `rsproxy.cn` 镜像（切换后 1 分钟内拉完 799 个 crate）。
+2. **MSYS2 的 gcc 无法正常链接**（`collect2` 返回 53/123，连 `hello world` 都失败）
+   → 改用 Rust 自带的 **`rust-lld`** 作为链接器，并显式指定 MinGW 导入库目录。
+   同时 `[lib] crate-type` 去掉了 `cdylib`（GNU 工具链下 DLL 导出符号会超过 65535 上限）。
+
+准备步骤：
+
+```powershell
+# 1) Rust（GNU 工具链，免装庞大的 MSVC Build Tools）
+winget install Rustlang.Rustup
+rustup default stable-x86_64-pc-windows-gnu
+
+# 2) MSYS2 + MinGW（只需 dlltool/ar 等构建期工具）
+#    安装 MSYS2 后：
+C:\msys64\usr\bin\bash.exe -lc "pacman -Sy --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils"
+
+# 3) 自检
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1
+```
+
+> 打包前请确保 `C:\msys64\mingw64\bin` 在 PATH 中（rustc 生成导入库需要 `dlltool`）。
+
+### 验收真实桌面应用
+
+```powershell
+# 让 WebView2 打开调试端口
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9444"
+.\src-tauri\target\debug\desk-course.exe
+
+# 另开一个终端跑同一套端到端断言
+$env:LUMEN_CDP_PORT=9444; $env:LUMEN_TARGET="5183/"
+node scripts/e2e.mjs "课表.xlsx"
+```
 
 ## 目录结构
 

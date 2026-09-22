@@ -21,6 +21,8 @@
     "core:webview:allow-create-webview-window",
     "opener:default",
     "notification:default",
+    "fs:allow-read-file",
+    "fs:allow-exists",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled"

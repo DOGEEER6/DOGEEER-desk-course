@@ -43,6 +43,8 @@ const parsed = await parseTimetableFile(buf.buffer.slice(buf.byteOffset, buf.byt
   totalWeeks: 20,
 })
 console.log(`解析到 ${parsed.records.length} 个时段`)
+/** 原始 xlsx 的 base64，用于在页面里构造 File 走一遍真实的导入面板流程 */
+const xlsxBase64 = buf.toString('base64')
 
 /* ---------- 2. 转成 store 的课程结构 ---------- */
 const palette = 12
@@ -404,6 +406,48 @@ await evaluate(`
 `)
 await new Promise((r) => setTimeout(r, 900))
 await shot('06-today')
+
+// 导入面板端到端（覆盖与原生拖放共用的解析 + 合并逻辑）
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('导入课表'))?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 900))
+const importOpen = await evaluate(`return /导入课表/.test(document.body.innerText) && /拖到这里/.test(document.body.innerText)`)
+check('导入面板可打开', importOpen)
+const injected = await evaluate(`
+  const input = document.querySelector('input[type=file]');
+  if (!input) return 'no-input';
+  const b64 = ${JSON.stringify(xlsxBase64)};
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const file = new File([bytes], '课表.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'ok';
+`)
+check('已把课表文件交给导入面板', injected === 'ok', String(injected))
+await new Promise((r) => setTimeout(r, 2500))
+const previewText = await evaluate(`return document.body.innerText`)
+check('解析出课程预览', /识别方式/.test(previewText) && /个上课时段/.test(previewText))
+check('预览里能看到真实课程', /线性代数/.test(previewText) || /工科数学分析/.test(previewText))
+await shot('07-import-preview')
+await evaluate(`
+  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '确认导入');
+  btn?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 2500))
+const afterImport = await evaluate(`const s = JSON.parse(localStorage.getItem('lumen-course-v1')); return s.state.courses.length`)
+check('确认导入后课程写入本地', afterImport > 0, `courses=${afterImport}`)
+// 回到课表视图确认卡片渲染
+await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' })); return 'ok'`)
+await new Promise((r) => setTimeout(r, 1200))
+check('导入后出现课程卡片', (await evaluate(`return document.querySelectorAll('.tt-card').length`)) > 0)
+await shot('08-import-done')
 
 const consoleErrors = await evaluate(`return window.__lumenErrors ? window.__lumenErrors.length : 0`)
 check('无未捕获错误标记', consoleErrors === 0, `errors=${consoleErrors}`)
