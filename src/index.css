@@ -1,24 +1,147 @@
 @import 'tailwindcss';
 
+/* ================================================================== */
+/* 设计令牌                                                            */
+/*                                                                     */
+/* 全部颜色走 CSS 变量：亮色由 html:not([data-theme]) 定义，           */
+/* 暗色由 [data-theme='dark'] 覆盖。窗口里通过 matchMedia 跟随系统。   */
+/* 这样 Tailwind 类（bg-ink / text-ink-3 / border-line …）自动适配。   */
+/* ================================================================== */
+
 @theme {
   --font-sans: 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Segoe UI',
     system-ui, sans-serif;
-  --color-ink: #0b1220;
-  --color-ink-2: #3d4658;
-  --color-ink-3: #6b7688;
-  --color-ink-4: #9aa4b5;
-  --color-line: rgba(15, 23, 42, 0.07);
-  --color-line-strong: rgba(15, 23, 42, 0.12);
+
+  /* 语义色：指向运行时可切换的变量 */
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-3: var(--c-ink-3);
+  --color-ink-4: var(--c-ink-4);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
   --color-accent: #0a84ff;
   --color-accent-soft: #e8f2ff;
+
+  /* 表面填充（替代原来散落的 bg-slate-900/[0.05] 之类） */
+  --color-surface-1: var(--c-surface-1);
+  --color-surface-2: var(--c-surface-2);
+  --color-surface-3: var(--c-surface-3);
+
+  /* 玻璃表面（用于面板 / 弹窗背景） */
+  --color-glass: var(--c-glass-panel);
+  --color-glass-thin: var(--c-glass-panel-thin);
+  --color-glass-line: var(--c-glass-border);
+
   --radius-card: 22px;
   --radius-pill: 999px;
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.16);
-  --shadow-float: 0 2px 6px rgba(15, 23, 42, 0.06), 0 24px 60px -20px rgba(15, 23, 42, 0.32);
+  --shadow-soft: var(--sh-soft);
+  --shadow-float: var(--sh-float);
+}
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --c-ink: #0b1220;
+  --c-ink-2: #3d4658;
+  --c-ink-3: #6b7688;
+  --c-ink-4: #9aa4b5;
+  --c-line: rgba(15, 23, 42, 0.07);
+  --c-line-strong: rgba(15, 23, 42, 0.13);
+
+  --c-surface-1: rgba(15, 23, 42, 0.04);
+  --c-surface-2: rgba(15, 23, 42, 0.07);
+  --c-surface-3: rgba(15, 23, 42, 0.11);
+
+  /* 玻璃 */
+  --c-glass: rgba(255, 255, 255, 0.82);
+  --c-glass-thin: rgba(255, 255, 255, 0.66);
+  --c-glass-panel: rgba(255, 255, 255, 0.94);
+  --c-glass-panel-thin: rgba(255, 255, 255, 0.82);
+  --c-glass-border: rgba(255, 255, 255, 0.72);
+  --c-glass-border-thin: rgba(255, 255, 255, 0.58);
+  --glass-blur: 30px;
+  --glass-sat: 190%;
+
+  --c-bg-solid: #eef1f7;
+  --c-bg-sheen-1: rgba(10, 132, 255, 0.16);
+  --c-bg-sheen-2: rgba(175, 82, 222, 0.14);
+  --c-bg-sheen-3: rgba(52, 199, 89, 0.1);
+  --c-bg-top: #f7f9fd;
+  --c-bg-bottom: #eef1f7;
+
+  --c-field: rgba(15, 23, 42, 0.045);
+  --c-field-focus: #fff;
+  --c-seg-bg: rgba(120, 130, 150, 0.14);
+  --c-seg-thumb: #fff;
+  --c-seg-thumb-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  --c-scroll-thumb: rgba(15, 23, 42, 0.16);
+  --c-scroll-thumb-hover: rgba(15, 23, 42, 0.3);
+  --c-card-sheen: rgba(255, 255, 255, 0.92);
+  --c-scrim: rgba(11, 18, 32, 0.3);
+
+  --sh-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -14px rgba(15, 23, 42, 0.22);
+  --sh-float: 0 2px 8px rgba(15, 23, 42, 0.08), 0 28px 70px -24px rgba(15, 23, 42, 0.4);
+  --sh-card-hover: 0 10px 26px -14px rgba(15, 23, 42, 0.55);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-ink: #f2f5fb;
+  --c-ink-2: #c9d1e0;
+  --c-ink-3: #94a0b6;
+  --c-ink-4: #6c778c;
+  --c-line: rgba(255, 255, 255, 0.09);
+  --c-line-strong: rgba(255, 255, 255, 0.16);
+
+  --c-surface-1: rgba(255, 255, 255, 0.055);
+  --c-surface-2: rgba(255, 255, 255, 0.1);
+  --c-surface-3: rgba(255, 255, 255, 0.16);
+
+  --c-glass: rgba(33, 38, 50, 0.9);
+  --c-glass-thin: rgba(33, 38, 50, 0.72);
+  --c-glass-panel: rgba(26, 30, 39, 0.95);
+  --c-glass-panel-thin: rgba(26, 30, 39, 0.82);
+  --c-glass-border: rgba(255, 255, 255, 0.15);
+  --c-glass-border-thin: rgba(255, 255, 255, 0.1);
+  --glass-blur: 34px;
+  --glass-sat: 170%;
+
+  --c-bg-solid: #0e1116;
+  --c-bg-sheen-1: rgba(10, 132, 255, 0.22);
+  --c-bg-sheen-2: rgba(175, 82, 222, 0.18);
+  --c-bg-sheen-3: rgba(48, 176, 199, 0.14);
+  --c-bg-top: #14181f;
+  --c-bg-bottom: #0b0e13;
+
+  --c-field: rgba(255, 255, 255, 0.07);
+  --c-field-focus: rgba(255, 255, 255, 0.12);
+  --c-seg-bg: rgba(255, 255, 255, 0.09);
+  --c-seg-thumb: rgba(255, 255, 255, 0.18);
+  --c-seg-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --c-scroll-thumb: rgba(255, 255, 255, 0.18);
+  --c-scroll-thumb-hover: rgba(255, 255, 255, 0.32);
+  --c-card-sheen: rgba(255, 255, 255, 0.8);
+  --c-scrim: rgba(0, 0, 0, 0.52);
+
+  --sh-soft: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 34px -16px rgba(0, 0, 0, 0.7);
+  --sh-float: 0 3px 10px rgba(0, 0, 0, 0.5), 0 30px 80px -28px rgba(0, 0, 0, 0.85);
+  --sh-card-hover: 0 10px 26px -14px rgba(0, 0, 0, 0.8);
+}
+
+/* 浮窗使用更强的通透感 */
+.frost {
+  --glass-blur: 40px;
+  --glass-sat: 210%;
+}
+[data-theme='dark'] .frost {
+  --glass-blur: 46px;
+  --glass-sat: 190%;
 }
 
 /* ------------------------------------------------------------------ */
-/* 基础                                                                */
+/* 基础：窗口透明，只有内部容器画圆角底色                                */
 /* ------------------------------------------------------------------ */
 
 * {
@@ -30,12 +153,14 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  /* 关键：Tauri 透明窗口里必须让 html/body 完全透明，
+     否则圆角外面会露出白/黑色方角 */
+  background: transparent !important;
 }
 
 body {
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background: #eef1f7;
   overflow: hidden;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -49,15 +174,85 @@ textarea {
   user-select: text;
 }
 
-/* 背景：两个柔和光斑，营造 iOS 的通透感 */
+/* 应用底：柔和光斑 */
 .app-bg {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(1200px 700px at 8% -10%, rgba(10, 132, 255, 0.16), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(175, 82, 222, 0.14), transparent 55%),
-    radial-gradient(1000px 800px at 60% 120%, rgba(52, 199, 89, 0.1), transparent 60%),
-    linear-gradient(180deg, #f7f9fd 0%, #eef1f7 100%);
+    radial-gradient(1200px 700px at 8% -10%, var(--c-bg-sheen-1), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, var(--c-bg-sheen-2), transparent 55%),
+    radial-gradient(1000px 800px at 60% 120%, var(--c-bg-sheen-3), transparent 60%),
+    linear-gradient(180deg, var(--c-bg-top) 0%, var(--c-bg-bottom) 100%);
+}
+
+/* 浮窗专用底：几乎全透明，让桌面透上来，毛玻璃才有意义 */
+.app-bg-mini {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(420px 260px at 12% -8%, var(--c-bg-sheen-1), transparent 70%),
+    radial-gradient(360px 240px at 100% 8%, var(--c-bg-sheen-2), transparent 70%);
+  opacity: 0.9;
+}
+
+/* ------------------------------------------------------------------ */
+/* 窗口外壳 / 自定义标题栏                                              */
+/* ------------------------------------------------------------------ */
+
+.window-shell {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--c-bg-solid);
+  box-shadow:
+    0 0 0 1px var(--c-line-strong),
+    var(--sh-float);
+}
+.window-shell[data-maximized='true'] {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.titlebar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  flex: none;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-btn {
+  -webkit-app-region: no-drag;
+  width: 34px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--color-ink-3);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.titlebar-btn:hover {
+  background: var(--c-surface-2);
+  color: var(--color-ink);
+}
+.titlebar-btn[data-kind='close']:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* 浮窗的拖拽把手 */
+.drag-handle {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
 }
 
 /* ------------------------------------------------------------------ */
@@ -65,18 +260,35 @@ textarea {
 /* ------------------------------------------------------------------ */
 
 .glass {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow: var(--shadow-soft);
+  background: var(--c-glass);
+  backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
+  border: 1px solid var(--c-glass-border);
+  box-shadow: var(--sh-soft);
 }
 
 .glass-thin {
-  background: rgba(255, 255, 255, 0.56);
-  backdrop-filter: saturate(160%) blur(14px);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: var(--c-glass-thin);
+  backdrop-filter: saturate(calc(var(--glass-sat) - 20%)) blur(calc(var(--glass-blur) * 0.55));
+  -webkit-backdrop-filter: saturate(calc(var(--glass-sat) - 20%)) blur(calc(var(--glass-blur) * 0.55));
+  border: 1px solid var(--c-glass-border-thin);
+}
+
+/* 浮窗主卡片：更强模糊 + 顶部高光，暗色桌面上也能看清 */
+.frost-card {
+  background: var(--c-glass);
+  backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
+  border: 1px solid var(--c-glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    var(--sh-float);
+}
+[data-theme='dark'] .frost-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    var(--sh-float);
 }
 
 .hairline {
@@ -84,7 +296,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* 滚动条：细、圆、悬停才明显                                            */
+/* 滚动条                                                              */
 /* ------------------------------------------------------------------ */
 
 .scroll-y {
@@ -104,13 +316,13 @@ textarea {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.14);
+  background: var(--c-scroll-thumb);
   border: 3px solid transparent;
   background-clip: content-box;
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.28);
+  background: var(--c-scroll-thumb-hover);
   background-clip: content-box;
 }
 
@@ -134,6 +346,10 @@ textarea {
 .btn:active {
   transform: scale(0.955);
 }
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .btn-primary {
   background: linear-gradient(180deg, #3aa0ff, #0a84ff);
   color: #fff;
@@ -145,17 +361,17 @@ textarea {
   filter: brightness(1.04);
 }
 .btn-ghost {
-  background: rgba(15, 23, 42, 0.05);
+  background: var(--c-surface-1);
   color: var(--color-ink-2);
 }
 .btn-ghost:hover {
-  background: rgba(15, 23, 42, 0.09);
+  background: var(--c-surface-2);
 }
 
 .field {
   width: 100%;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.045);
+  background: var(--c-field);
   border: 1px solid transparent;
   padding: 9px 12px;
   font-size: 13.5px;
@@ -170,9 +386,13 @@ textarea {
   color: var(--color-ink-4);
 }
 .field:focus {
-  background: #fff;
+  background: var(--c-field-focus);
   border-color: rgba(10, 132, 255, 0.5);
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.14);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.16);
+}
+select.field option {
+  background: var(--c-field-focus);
+  color: var(--color-ink);
 }
 
 /* iOS 分段控件 */
@@ -182,7 +402,7 @@ textarea {
   padding: 3px;
   gap: 2px;
   border-radius: 11px;
-  background: rgba(120, 130, 150, 0.14);
+  background: var(--c-seg-bg);
 }
 .segmented > button {
   position: relative;
@@ -193,6 +413,7 @@ textarea {
   font-weight: 600;
   color: var(--color-ink-3);
   transition: color 0.2s ease;
+  white-space: nowrap;
 }
 .segmented > button[data-active='true'] {
   color: var(--color-ink);
@@ -203,8 +424,8 @@ textarea {
   top: 3px;
   bottom: 3px;
   border-radius: 9px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  background: var(--c-seg-thumb);
+  box-shadow: var(--c-seg-thumb-shadow);
 }
 
 /* iOS 开关 */
@@ -213,7 +434,7 @@ textarea {
   width: 47px;
   height: 29px;
   border-radius: 999px;
-  background: rgba(120, 130, 150, 0.3);
+  background: var(--c-surface-3);
   transition: background 0.24s cubic-bezier(0.22, 1, 0.36, 1);
   flex: none;
 }
@@ -228,7 +449,7 @@ textarea {
   height: 24px;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.32);
   transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .switch[data-on='true'] > span {
@@ -240,17 +461,21 @@ textarea {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  border: 1.8px solid rgba(120, 130, 150, 0.5);
+  border: 1.8px solid var(--c-surface-3);
   display: grid;
   place-items: center;
   flex: none;
   transition:
     background 0.2s ease,
-    border-color 0.2s ease;
+    border-color 0.2s ease,
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
   cursor: pointer;
 }
 .checkbox:hover {
   border-color: var(--color-accent);
+}
+.checkbox:active {
+  transform: scale(0.9);
 }
 .checkbox[data-done='true'] {
   background: linear-gradient(180deg, #4cd964, #34c759);
@@ -260,11 +485,6 @@ textarea {
 /* ------------------------------------------------------------------ */
 /* 课表网格                                                            */
 /* ------------------------------------------------------------------ */
-
-.tt-grid-lines {
-  background-image: linear-gradient(to right, var(--color-line) 1px, transparent 1px);
-  background-size: calc(100% / 7) 100%;
-}
 
 .tt-card {
   border-radius: 14px;
@@ -281,14 +501,14 @@ textarea {
 }
 .tt-card:hover {
   filter: brightness(1.015);
-  box-shadow: 0 8px 22px -12px rgba(15, 23, 42, 0.5);
+  box-shadow: var(--sh-card-hover);
   transform: translateY(-1px);
 }
 .tt-card:active {
   transform: scale(0.985);
 }
 .tt-card[data-dragging='true'] {
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--sh-float);
   z-index: 40;
   /* 注意：拖动位移由内联 transform 控制，这里不要再写 transform 以免覆盖 */
   filter: brightness(1.03);
@@ -323,7 +543,7 @@ textarea {
   width: 30px;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--c-card-sheen);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
 }
 .resize-handle.top {
@@ -347,6 +567,22 @@ textarea {
   border-radius: 999px;
   background: rgba(10, 132, 255, 0.14);
   box-shadow: inset 0 0 0 1.5px rgba(10, 132, 255, 0.6);
+}
+
+/* 月视图 / 学期视图 */
+.month-cell {
+  border-radius: 12px;
+  background: var(--c-surface-1);
+  transition:
+    background 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.month-cell:hover {
+  background: var(--c-surface-2);
+  transform: translateY(-1px);
+}
+.month-cell[data-today='true'] {
+  box-shadow: inset 0 0 0 1.5px #0a84ff;
 }
 
 /* ------------------------------------------------------------------ */
@@ -379,17 +615,6 @@ textarea {
 }
 .animate-pop {
   animation: pop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-@keyframes sweep {
-  0% {
-    transform: translateX(-14%);
-    opacity: 0.55;
-  }
-  100% {
-    transform: translateX(20%);
-    opacity: 1;
-  }
 }
 
 .now-line {
@@ -442,4 +667,15 @@ body[data-resizing='true'] {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* 尊重系统的「减少动态效果」 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

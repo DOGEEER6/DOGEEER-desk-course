@@ -96,7 +96,7 @@ export function CourseDrawer({
               </span>
             </div>
           </div>
-          <button className="btn h-8 w-8 flex-none bg-white/70 text-ink-2" onClick={onClose} aria-label="关闭">
+          <button className="btn h-8 w-8 flex-none bg-glass-thin text-ink-2" onClick={onClose} aria-label="关闭">
             <Icon name="close" size={15} />
           </button>
         </div>
@@ -190,7 +190,7 @@ export function CourseDrawer({
               </Field>
             </section>
 
-            <section className="rounded-2xl bg-slate-900/[0.03] p-3 text-[11.5px] leading-5 text-ink-3">
+            <section className="rounded-2xl bg-surface-1 p-3 text-[11.5px] leading-5 text-ink-3">
               提示：在课表里直接拖动课程卡片可以移动；拖动卡片上下边缘可以拉长 / 缩短，松开即自动吸附到节次。
             </section>
           </div>
@@ -239,13 +239,13 @@ export function CourseDrawer({
             </div>
 
             {related.length === 0 ? (
-              <div className="rounded-2xl bg-slate-900/[0.03] p-4 text-center text-[12px] text-ink-3">
+              <div className="rounded-2xl bg-surface-1 p-4 text-center text-[12px] text-ink-3">
                 还没有关联的作业，添加后会出现在右侧待办清单
               </div>
             ) : (
               <div className="space-y-1.5">
                 {related.map((t) => (
-                  <div key={t.id} className="flex items-center gap-2.5 rounded-xl bg-slate-900/[0.03] px-3 py-2">
+                  <div key={t.id} className="flex items-center gap-2.5 rounded-xl bg-surface-1 px-3 py-2">
                     <button
                       className="checkbox"
                       data-done={t.done}
@@ -343,7 +343,7 @@ function SessionRow({
 }) {
   const range = sessionTimeRange(session, periods)
   return (
-    <div className="rounded-2xl border border-line bg-white/60 p-3">
+    <div className="rounded-2xl border border-line bg-glass-thin p-3">
       <div className="flex items-center gap-2">
         <select
           className="field h-8 w-[86px] flex-none py-0"
@@ -418,7 +418,7 @@ function WeekPicker({ weeks, onChange }: { weeks: number[]; onChange: (w: number
   return (
     <div className="mt-2">
       <button
-        className="btn h-7 bg-slate-900/[0.05] px-2.5 text-[11.5px] font-semibold text-ink-2"
+        className="btn h-7 bg-surface-2 px-2.5 text-[11.5px] font-semibold text-ink-2"
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="calendar" size={12} />
@@ -440,7 +440,7 @@ function WeekPicker({ weeks, onChange }: { weeks: number[]; onChange: (w: number
                   key={w}
                   className={clsx(
                     'tabular h-7 rounded-lg text-[11px] font-semibold transition-colors',
-                    on ? 'bg-[#0A84FF] text-white' : 'bg-slate-900/[0.05] text-ink-3 hover:bg-slate-900/[0.1]',
+                    on ? 'bg-[#0A84FF] text-white' : 'bg-surface-2 text-ink-3 hover:bg-surface-3',
                   )}
                   onClick={() => {
                     if (all) {
@@ -459,17 +459,17 @@ function WeekPicker({ weeks, onChange }: { weeks: number[]; onChange: (w: number
             })}
           </div>
           <div className="mt-2 flex gap-2 text-[11.5px]">
-            <button className="btn h-7 bg-slate-900/[0.05] px-2.5" onClick={() => onChange([])}>
+            <button className="btn h-7 bg-surface-2 px-2.5" onClick={() => onChange([])}>
               每周
             </button>
             <button
-              className="btn h-7 bg-slate-900/[0.05] px-2.5"
+              className="btn h-7 bg-surface-2 px-2.5"
               onClick={() => onChange(Array.from({ length: total }, (_, i) => i + 1).filter((w) => w % 2 === 1))}
             >
               单周
             </button>
             <button
-              className="btn h-7 bg-slate-900/[0.05] px-2.5"
+              className="btn h-7 bg-surface-2 px-2.5"
               onClick={() => onChange(Array.from({ length: total }, (_, i) => i + 1).filter((w) => w % 2 === 0))}
             >
               双周

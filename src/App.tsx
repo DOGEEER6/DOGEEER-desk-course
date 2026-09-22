@@ -10,13 +10,18 @@ import { TodoPanel } from './components/TodoPanel'
 import { CourseDrawer } from './components/CourseDrawer'
 import { SettingsPage } from './components/SettingsPage'
 import { ImportDialog, ImportDropOverlay } from './components/ImportDialog'
-import { Icon, Overlay, ToastHost, springSoft } from './components/ui'
+import { Icon, Overlay, Segmented, ToastHost, springSoft } from './components/ui'
+import { MonthView, TermView } from './components/CalendarViews'
+import { TitleBar } from './components/TitleBar'
+import { initTheme, setTheme, type ThemeMode } from './lib/theme'
 import { colorOf } from './lib/palette'
 import { mondayOfWeek, pad2, weekIndexOf } from './lib/time'
 import { toast } from './lib/toast'
 import { findCurrentClass } from './hooks'
-import { isDesktop, launchedAtStartup, showMainWindow } from './lib/desktop'
+import { isDesktop, launchedAtStartup, setAutoStart, showMainWindow } from './lib/desktop'
 import { parseTimetableFile } from './lib/excel'
+
+type CalView = 'week' | 'month' | 'term'
 
 export default function App() {
   const now = useNow(1000)
@@ -31,21 +36,47 @@ export default function App() {
   const selectedCourseId = useApp((s) => s.selectedCourseId)
   const selectCourse = useApp((s) => s.selectCourse)
   const addCourse = useApp((s) => s.addCourse)
+  const todos = useApp((s) => s.todos)
 
   const [importOpen, setImportOpen] = useState(false)
   const [jumpOpen, setJumpOpen] = useState(false)
   const [newCourse, setNewCourse] = useState<{ day: Weekday; start: number; end: number } | null>(null)
+  const [calView, setCalView] = useState<CalView>('week')
+  const [, setThemeModeState] = useState<ThemeMode>(() => initTheme())
+
+  /** 主题跟随设置（设置页可改），并同步到 <html data-theme> */
+  const settingsTheme = settings.theme ?? 'system'
+  useEffect(() => {
+    setTheme(settingsTheme)
+    setThemeModeState(settingsTheme)
+  }, [settingsTheme])
+
+  const openTodoCount = useMemo(() => todos.filter((t) => !t.done && !t.archived).length, [todos])
 
   const realWeek = weekIndexOf(settings.semester.startDate, now)
   const week = previewWeek ?? realWeek
   const totalWeeks = settings.semester.totalWeeks
 
-  /* ---------------- 桌面端：首次运行显示主窗口，之后按开机自启状态决定 ---------------- */
+  /* ---------------- 桌面端：首次运行显示主窗口；默认开启「开机只显示浮窗」 ---------------- */
   useEffect(() => {
     if (!isDesktop()) return
     const KEY = 'lumen-desktop-initialized'
     const initialized = localStorage.getItem(KEY) === '1'
     void (async () => {
+      // 默认开启开机自启（只显示浮窗），用户可在设置里关掉
+      const AKEY = 'lumen-autostart-initialized'
+      if (localStorage.getItem(AKEY) !== '1') {
+        localStorage.setItem(AKEY, '1')
+        const enabled = await setAutoStart(true)
+        if (enabled) {
+          toast('已开启开机自启', {
+            desc: '下次开机只显示桌面浮窗，点「打开完整课表」进入主界面（可在设置里关闭）',
+            tone: 'info',
+            duration: 6000,
+          })
+        }
+      }
+
       if (!initialized) {
         localStorage.setItem(KEY, '1')
         await showMainWindow()
@@ -154,198 +185,220 @@ export default function App() {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className="window-shell">
       <div className="app-bg" />
 
-      <div className="relative flex h-full">
-        {/* ------------------------- 侧栏 ------------------------- */}
-        <aside className="glass z-20 m-3 flex w-[232px] flex-none flex-col overflow-hidden rounded-[26px] p-3">
-          {/* 品牌 */}
-          <div className="flex items-center gap-2.5 px-2 pb-3 pt-1">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white shadow-[0_6px_16px_-8px_rgba(10,132,255,0.9)]">
-              <Icon name="calendar" size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[14px] font-bold leading-tight tracking-[-0.02em]">Lumen 课程表</div>
+      <div className="relative flex h-full flex-col">
+        <TitleBar now={now} />
+
+        <div className="relative flex min-h-0 flex-1">
+          {/* ------------------------- 侧栏 ------------------------- */}
+          <aside className="glass z-20 m-3 mr-0 flex w-[224px] flex-none flex-col overflow-hidden rounded-[24px] p-3">
+            {/* 日期 */}
+            <div className="px-2 pb-2.5">
+              <div className="text-[13.5px] font-bold leading-tight tracking-[-0.02em]">
+                {now.getMonth() + 1} 月 {now.getDate()} 日
+              </div>
               <div className="truncate text-[11px] text-ink-4">
-                {now.getMonth() + 1} 月 {now.getDate()} 日 · 第 {realWeek} 周
+                第 {realWeek} 教学周 · {list.length} 节课
               </div>
             </div>
-          </div>
 
-          {/* 导航 */}
-          <nav className="space-y-0.5">
-            <NavItem
-              active={view === 'timetable'}
-              icon="calendar"
-              label="课程表"
-              hint={`第 ${week} 周`}
-              onClick={() => setView('timetable')}
-            />
-            <NavItem
-              active={view === 'today'}
-              icon="sun"
-              label="今日"
-              hint={list.length ? `${list.length} 节课` : '无课'}
-              onClick={() => setView('today')}
-            />
-            <NavItem
-              active={view === 'todos'}
-              icon="checkCircle"
-              label="待办作业"
-              hint={String(useApp.getState().todos.filter((t) => !t.done).length)}
-              onClick={() => setView('todos')}
-            />
-            <NavItem active={view === 'settings'} icon="settings" label="设置" onClick={() => setView('settings')} />
-          </nav>
+            {/* 导航 */}
+            <nav className="space-y-0.5">
+              <NavItem
+                active={view === 'timetable'}
+                icon="calendar"
+                label="课程表"
+                hint={`第 ${week} 周`}
+                onClick={() => setView('timetable')}
+              />
+              <NavItem
+                active={view === 'today'}
+                icon="sun"
+                label="今日"
+                hint={list.length ? `${list.length} 节课` : '无课'}
+                onClick={() => setView('today')}
+              />
+              <NavItem
+                active={view === 'todos'}
+                icon="checkCircle"
+                label="待办作业"
+                hint={String(openTodoCount)}
+                onClick={() => setView('todos')}
+              />
+              <NavItem active={view === 'settings'} icon="settings" label="设置" onClick={() => setView('settings')} />
+            </nav>
 
-          <div className="my-3 h-px bg-line" />
+            <div className="my-2.5 h-px bg-line" />
 
-          {/* 接下来 */}
-          <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-4">
-            {current ? '正在上课' : '接下来'}
-          </div>
-          <div className="scroll-y min-h-0 flex-1 px-0.5">
-            {current || next ? (
-              <NextCard item={(current ?? next)!} live={!!current} onClick={() => selectCourse((current ?? next)!.courseId)} />
-            ) : (
-              <div className="rounded-2xl bg-slate-900/[0.03] px-3 py-3 text-[11.5px] leading-5 text-ink-4">
-                今天没有更多课程了。看看待办清单，提前完成一份作业？
-              </div>
-            )}
-
-            {/* 今天剩下的课 */}
-            {list.length > 0 && (
-              <div className="mt-3 space-y-1">
-                {list
-                  .filter((x) => x.end.getTime() > now.getTime())
-                  .slice(0, 6)
-                  .map((x) => {
-                    const c = courses.find((cc) => cc.id === x.courseId)
-                    const col = colorOf(c?.color ?? 0)
-                    const isCurrent = current?.sessionId === x.sessionId
-                    return (
-                      <button
-                        key={x.sessionId}
-                        onClick={() => selectCourse(x.courseId)}
-                        className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-slate-900/[0.045]"
-                      >
-                        <span
-                          className="h-6 w-1 flex-none rounded-full"
-                          style={{ background: col.solid, opacity: isCurrent ? 1 : 0.55 }}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[12px] font-semibold text-ink-2">{x.name}</span>
-                          <span className="tabular block text-[10.5px] text-ink-4">
-                            {pad2(x.start.getHours())}:{pad2(x.start.getMinutes())} · {x.room ?? '未填地点'}
-                          </span>
-                        </span>
-                      </button>
-                    )
-                  })}
-              </div>
-            )}
-          </div>
-
-          {/* 底部操作 */}
-          <div className="mt-2 space-y-1.5">
-            <button className="btn btn-primary h-9 w-full text-[12.5px]" onClick={() => setImportOpen(true)}>
-              <Icon name="import" size={14} />
-              导入课表
-            </button>
-            <button className="btn btn-ghost h-8 w-full text-[11.5px]" onClick={() => setJumpOpen(true)}>
-              <Icon name="search" size={13} />
-              跳转到周次…
-            </button>
-          </div>
-        </aside>
-
-        {/* ------------------------- 主区域 ------------------------- */}
-        <main className="flex min-w-0 flex-1 flex-col p-3 pl-0">
-          <AnimatePresence mode="wait">
-            {/* ============ 课程表 ============ */}
-            {view === 'timetable' && (
-              <motion.div
-                key="timetable"
-                className="flex min-h-0 flex-1 flex-col gap-3"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={springSoft}
-              >
-                {/* 顶部：当前课程 + 待办 */}
-                <div className="flex flex-none gap-3">
-                  <TodayHero now={now} onOpenCourse={selectCourse} />
-                  <div className="glass flex w-[400px] flex-none flex-col rounded-[24px] p-4">
-                    <TodoPanel compact />
-                  </div>
+            {/* 接下来 */}
+            <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-4">
+              {current ? '正在上课' : '接下来'}
+            </div>
+            <div className="scroll-y min-h-0 flex-1 px-0.5">
+              {current || next ? (
+                <NextCard
+                  item={(current ?? next)!}
+                  live={!!current}
+                  onClick={() => selectCourse((current ?? next)!.courseId)}
+                />
+              ) : (
+                <div className="rounded-2xl bg-surface-1 px-3 py-3 text-[11.5px] leading-5 text-ink-4">
+                  今天没有更多课程了。看看待办清单，提前完成一份作业？
                 </div>
+              )}
 
-                {/* 课表卡片 */}
-                <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] p-3">
-                  <div className="flex flex-none items-center justify-between gap-3 pb-1">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
+              {/* 今天剩下的课 */}
+              {list.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {list
+                    .filter((x) => x.end.getTime() > now.getTime())
+                    .slice(0, 6)
+                    .map((x) => {
+                      const c = courses.find((cc) => cc.id === x.courseId)
+                      const col = colorOf(c?.color ?? 0)
+                      const isCurrent = current?.sessionId === x.sessionId
+                      return (
                         <button
-                          className="btn h-8 w-8 bg-slate-900/5 text-ink-2 disabled:opacity-30"
-                          disabled={week <= 1}
-                          onClick={() => setPreviewWeek(Math.max(1, week - 1))}
-                          aria-label="上一周"
+                          key={x.sessionId}
+                          onClick={() => selectCourse(x.courseId)}
+                          className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-1"
                         >
-                          <Icon name="chevronLeft" size={15} />
-                        </button>
-                        <button
-                          className="btn h-8 w-8 bg-slate-900/5 text-ink-2 disabled:opacity-30"
-                          disabled={week >= totalWeeks}
-                          onClick={() => setPreviewWeek(Math.min(totalWeeks, week + 1))}
-                          aria-label="下一周"
-                        >
-                          <Icon name="chevronRight" size={15} />
-                        </button>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[14px] font-bold tracking-[-0.02em]">
-                            第 {week} 教学周
-                          </span>
-                          {previewWeek != null && previewWeek !== realWeek && (
-                            <span className="rounded-full bg-[#FF9F0A]/16 px-2 py-[1px] text-[10.5px] font-bold text-[#96590A]">
-                              预览中
+                          <span
+                            className="h-6 w-1 flex-none rounded-full"
+                            style={{ background: col.solid, opacity: isCurrent ? 1 : 0.55 }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12px] font-semibold text-ink-2">{x.name}</span>
+                            <span className="tabular block text-[10.5px] text-ink-4">
+                              {pad2(x.start.getHours())}:{pad2(x.start.getMinutes())} · {x.room ?? '未填地点'}
                             </span>
-                          )}
-                        </div>
-                        <div className="tabular text-[11px] text-ink-4">{weekDates}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {previewWeek != null && previewWeek !== realWeek && (
-                        <button className="btn btn-ghost h-8 px-3 text-[12px]" onClick={() => setPreviewWeek(null)}>
-                          回到本周
-                        </button>
-                      )}
-                      <div className="flex items-center gap-2 rounded-full bg-slate-900/[0.05] px-3 py-1.5">
-                        <span className="tabular text-[12.5px] font-bold tracking-[-0.01em] text-ink-2">
-                          {pad2(now.getHours())}:{pad2(now.getMinutes())}
-                          <span className="ml-0.5 text-[10.5px] font-semibold text-ink-4">
-                            {pad2(now.getSeconds())}
                           </span>
-                        </span>
-                        <span className="h-3 w-px bg-line-strong" />
-                        <span className="text-[11.5px] font-semibold text-ink-3">周视图</span>
+                        </button>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* 底部操作 */}
+            <div className="mt-2 space-y-1.5">
+              <button className="btn btn-primary h-9 w-full text-[12.5px]" onClick={() => setImportOpen(true)}>
+                <Icon name="import" size={14} />
+                导入课表
+              </button>
+              <button className="btn btn-ghost h-8 w-full text-[11.5px]" onClick={() => setJumpOpen(true)}>
+                <Icon name="search" size={13} />
+                跳转到周次…
+              </button>
+            </div>
+          </aside>
+
+          {/* ------------------------- 主区域 ------------------------- */}
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col p-3 pl-3">
+            <AnimatePresence mode="wait">
+              {/* ============ 课程表（周 / 月 / 学期） ============ */}
+              {view === 'timetable' && (
+                <motion.div
+                  key="timetable"
+                  className="flex min-h-0 flex-1 flex-col gap-2.5"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={springSoft}
+                >
+                  {calView === 'week' && (
+                    <div className="flex flex-none gap-2.5">
+                      <TodayHero now={now} onOpenCourse={selectCourse} />
+                      <div className="glass flex w-[392px] flex-none flex-col rounded-[24px] p-3.5">
+                        <TodoPanel compact />
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  <Timetable
-                    week={Math.max(1, week)}
-                    showWeekend={settings.showWeekend}
-                    onOpenCourse={selectCourse}
-                    onAddAt={handleAddAt}
-                  />
-                </div>
-              </motion.div>
-            )}
+                  <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] p-3">
+                    {/* 工具条 */}
+                    <div className="flex flex-none items-center justify-between gap-3 pb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <button
+                            className="btn h-8 w-8 bg-surface-2 text-ink-2 disabled:opacity-30"
+                            disabled={calView === 'term' || week <= 1}
+                            onClick={() => setPreviewWeek(Math.max(1, week - 1))}
+                            aria-label="上一周"
+                          >
+                            <Icon name="chevronLeft" size={15} />
+                          </button>
+                          <button
+                            className="btn h-8 w-8 bg-surface-2 text-ink-2 disabled:opacity-30"
+                            disabled={calView === 'term' || week >= totalWeeks}
+                            onClick={() => setPreviewWeek(Math.min(totalWeeks, week + 1))}
+                            aria-label="下一周"
+                          >
+                            <Icon name="chevronRight" size={15} />
+                          </button>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[14px] font-bold tracking-[-0.02em]">
+                              第 {week} 教学周
+                            </span>
+                            {previewWeek != null && previewWeek !== realWeek && (
+                              <span className="rounded-full bg-[#FF9F0A]/16 px-2 py-[1px] text-[10.5px] font-bold text-[#96590A]">
+                                预览中
+                              </span>
+                            )}
+                          </div>
+                          <div className="tabular text-[11px] text-ink-4">{weekDates}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {previewWeek != null && previewWeek !== realWeek && (
+                          <button className="btn btn-ghost h-8 px-3 text-[12px]" onClick={() => setPreviewWeek(null)}>
+                            回到本周
+                          </button>
+                        )}
+                        <Segmented<CalView>
+                          value={calView}
+                          onChange={setCalView}
+                          options={[
+                            { value: 'week', label: '周视图' },
+                            { value: 'month', label: '月视图' },
+                            { value: 'term', label: '学期视图' },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {calView === 'week' && (
+                      <Timetable
+                        week={Math.max(1, week)}
+                        showWeekend={settings.showWeekend}
+                        onOpenCourse={selectCourse}
+                        onAddAt={handleAddAt}
+                      />
+                    )}
+                    {calView === 'month' && (
+                      <MonthView
+                        week={Math.max(1, week)}
+                        showWeekend={settings.showWeekend}
+                        onOpenCourse={selectCourse}
+                      />
+                    )}
+                    {calView === 'term' && (
+                      <TermView
+                        onOpenCourse={selectCourse}
+                        onPickWeek={(w) => {
+                          setPreviewWeek(w === realWeek ? null : w)
+                          setCalView('week')
+                        }}
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              )}
 
             {/* ============ 今日 ============ */}
             {view === 'today' && (
@@ -408,7 +461,8 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
-        </main>
+          </main>
+        </div>
       </div>
 
       {/* ------------------------- 浮层 ------------------------- */}
@@ -483,13 +537,13 @@ function NavItem({
       onClick={onClick}
       className={clsx(
         'relative flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-2.5 text-left transition-colors',
-        active ? 'text-ink' : 'text-ink-3 hover:bg-slate-900/[0.04]',
+        active ? 'text-ink' : 'text-ink-3 hover:bg-surface-1',
       )}
     >
       {active && (
         <motion.span
           layoutId="nav-pill"
-          className="absolute inset-0 rounded-2xl bg-white shadow-[0_2px_10px_-4px_rgba(15,23,42,0.28)]"
+          className="absolute inset-0 rounded-2xl bg-glass-thin shadow-[var(--sh-soft)]"
           transition={springSoft}
         />
       )}
@@ -575,7 +629,7 @@ function NewCourseDialog({
   const c = colorOf(color)
   return (
     <Overlay open onClose={onClose} align="center">
-      <div className="w-[420px] max-w-[92vw] overflow-hidden rounded-[26px] border border-white/70 bg-white/95 p-5 shadow-[var(--shadow-float)] backdrop-blur-2xl">
+      <div className="w-[420px] max-w-[92vw] overflow-hidden rounded-[26px] border border-glass-line bg-glass p-5 shadow-[var(--shadow-float)] backdrop-blur-2xl">
         <h3 className="text-[16px] font-bold tracking-[-0.02em]">新建课程</h3>
         <p className="mt-0.5 text-[12px] text-ink-3">
           周{'一二三四五六日'[target.day - 1]} · 第 {target.start}
@@ -599,7 +653,7 @@ function NewCourseDialog({
                 key={i}
                 className={clsx(
                   'h-6 w-6 rounded-full transition-transform',
-                  color === i ? 'scale-110 ring-2 ring-offset-1 ring-slate-400' : 'hover:scale-110',
+                  color === i ? 'scale-110 ring-2 ring-offset-1 ring-ink-4' : 'hover:scale-110',
                 )}
                 style={{ background: col.solid }}
                 onClick={() => setColor(i)}
@@ -644,7 +698,7 @@ function WeekJumpDialog({
   useEffect(() => setValue(String(current)), [current, open])
   return (
     <Overlay open={open} onClose={onClose} align="center">
-      <div className="w-[420px] max-w-[92vw] rounded-[26px] border border-white/70 bg-white/95 p-5 shadow-[var(--shadow-float)] backdrop-blur-2xl">
+      <div className="w-[420px] max-w-[92vw] rounded-[26px] border border-glass-line bg-glass p-5 shadow-[var(--shadow-float)] backdrop-blur-2xl">
         <h3 className="text-[16px] font-bold tracking-[-0.02em]">跳转到教学周</h3>
         <div className="mt-3 grid grid-cols-5 gap-1.5">
           {Array.from({ length: total }, (_, i) => i + 1).map((w) => (
@@ -653,7 +707,7 @@ function WeekJumpDialog({
               onClick={() => onPick(w)}
               className={clsx(
                 'tabular rounded-xl py-2 text-[12.5px] font-semibold transition-colors',
-                w === current ? 'bg-[#0A84FF] text-white' : 'bg-slate-900/[0.05] text-ink-2 hover:bg-slate-900/[0.1]',
+                w === current ? 'bg-[#0A84FF] text-white' : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
               )}
             >
               {w}

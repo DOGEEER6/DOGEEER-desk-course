@@ -15,6 +15,42 @@ interface TauriGlobal {
   window?: { getCurrentWindow?: () => unknown }
 }
 
+/** 当前 webview 窗口的句柄（含最小化/最大化/关闭等） */
+interface CurrentWindow {
+  minimize?: () => Promise<void>
+  toggleMaximize?: () => Promise<void>
+  maximize?: () => Promise<void>
+  unmaximize?: () => Promise<void>
+  isMaximized?: () => Promise<boolean>
+  close?: () => Promise<void>
+  hide?: () => Promise<void>
+  setAlwaysOnTop?: (v: boolean) => Promise<void>
+  startDragging?: () => Promise<void>
+  onResized?: (cb: () => void) => Promise<() => void>
+}
+
+function currentWindow(): CurrentWindow | undefined {
+  const fn = tauriGlobal()?.window?.getCurrentWindow as (() => CurrentWindow) | undefined
+  return fn ? fn() : undefined
+}
+
+/** 窗口控制（自定义标题栏用） */
+export const minimizeWindow = () => currentWindow()?.minimize?.() ?? Promise.resolve()
+export const toggleMaximizeWindow = () => currentWindow()?.toggleMaximize?.() ?? Promise.resolve()
+export const closeWindow = () => currentWindow()?.close?.() ?? Promise.resolve()
+export async function isWindowMaximized(): Promise<boolean> {
+  try {
+    return (await currentWindow()?.isMaximized?.()) ?? false
+  } catch {
+    return false
+  }
+}
+export async function onWindowResized(cb: () => void): Promise<() => void> {
+  const win = currentWindow()
+  if (!win?.onResized) return () => {}
+  return win.onResized(cb)
+}
+
 function internals(): Internals | undefined {
   return (window as unknown as { __TAURI_INTERNALS__?: Internals }).__TAURI_INTERNALS__
 }
@@ -54,12 +90,12 @@ export const getAutoStart = () => call<boolean>('get_autostart')
 /** 是否由开机自启拉起 */
 export const launchedAtStartup = () => call<boolean>('launched_at_startup')
 
+/** 应用版本 */
 export const appVersion = () => call<string>('app_version')
 
 /** 隐藏当前窗口（浮窗自己的关闭按钮） */
 export async function hideCurrentWindow(): Promise<void> {
-  const w = tauriGlobal()?.window
-  const win = w?.getCurrentWindow?.() as { hide?: () => Promise<void> } | undefined
+  const win = currentWindow()
   if (win?.hide) {
     await win.hide()
     return

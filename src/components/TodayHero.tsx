@@ -106,7 +106,7 @@ export function TodayHero({ now, onOpenCourse }: { now: Date; onOpenCourse: (id:
 
         {shown && (
           <div className="mt-4 flex items-center gap-2">
-            <button className="btn h-8 bg-white/80 px-3 text-[12px] font-semibold" style={{ color: color.text }} onClick={() => onOpenCourse(shown.courseId)}>
+            <button className="btn h-8 bg-glass-thin px-3 text-[12px] font-semibold" style={{ color: color.text }} onClick={() => onOpenCourse(shown.courseId)}>
               <Icon name="note" size={13} />
               课程详情
             </button>
@@ -153,7 +153,7 @@ export function TodayHero({ now, onOpenCourse }: { now: Date; onOpenCourse: (id:
             )
           })}
           {list.length === 0 && (
-            <div className="rounded-xl bg-slate-900/[0.035] px-3 py-1.5 text-[11.5px] text-ink-4">今天无课</div>
+            <div className="rounded-xl bg-surface-1 px-3 py-1.5 text-[11.5px] text-ink-4">今天无课</div>
           )}
         </div>
       </div>
@@ -257,10 +257,10 @@ export function TodayList({ now, onOpenCourse }: { now: Date; onOpenCourse: (id:
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-bold">{item.name}</span>
                     {active && (
-                      <span className="rounded-full bg-white/25 px-2 py-[1px] text-[10.5px] font-bold">进行中</span>
+                      <span className="rounded-full bg-black/20 px-2 py-[1px] text-[10.5px] font-bold">进行中</span>
                     )}
                     {isNow && !active && (
-                      <span className="rounded-full bg-black/10 px-2 py-[1px] text-[10.5px] font-bold">本时段</span>
+                      <span className="rounded-full bg-surface-3 px-2 py-[1px] text-[10.5px] font-bold">本时段</span>
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] opacity-80">
@@ -270,7 +270,7 @@ export function TodayList({ now, onOpenCourse }: { now: Date; onOpenCourse: (id:
                   </div>
                 </button>
               ) : (
-                <div className="flex-1 rounded-2xl border border-dashed border-transparent bg-slate-900/[0.02] py-2" />
+                <div className="flex-1 rounded-2xl border border-dashed border-transparent bg-surface-1 py-2" />
               )}
             </div>
           )

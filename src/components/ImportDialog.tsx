@@ -136,7 +136,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   if (!open) return null
 
   return (
-    <div className="flex h-full w-[560px] max-w-[94vw] flex-col overflow-hidden rounded-[26px] border border-white/70 bg-white/95 shadow-[var(--shadow-float)] backdrop-blur-2xl">
+    <div className="flex h-full w-[560px] max-w-[94vw] flex-col overflow-hidden rounded-[26px] border border-glass-line bg-glass shadow-[var(--shadow-float)] backdrop-blur-2xl">
       {/* 头部 */}
       <div className="flex items-center justify-between border-b border-line px-6 py-4">
         <div>
@@ -145,7 +145,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             支持教务处 / WPS 导出的 .xlsx、.xls、.csv
           </p>
         </div>
-        <button className="btn h-8 w-8 bg-slate-900/5 text-ink-2" onClick={onClose} aria-label="关闭">
+        <button className="btn h-8 w-8 bg-surface-2 text-ink-2" onClick={onClose} aria-label="关闭">
           <Icon name="close" size={15} />
         </button>
       </div>
@@ -157,7 +157,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             <div
               className={clsx(
                 'grid place-items-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors',
-                dropActive ? 'border-[#0A84FF] bg-[#0A84FF]/[0.06]' : 'border-slate-900/12 bg-slate-900/[0.02]',
+                dropActive ? 'border-[#0A84FF] bg-[#0A84FF]/[0.06]' : 'border-line-strong bg-surface-1',
               )}
               onDragOver={(e) => {
                 e.preventDefault()
@@ -201,7 +201,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               下载示例模板（同时也是一份格式说明）
             </button>
 
-            <div className="mt-5 rounded-2xl bg-slate-900/[0.03] p-4 text-[12px] leading-6 text-ink-3">
+            <div className="mt-5 rounded-2xl bg-surface-1 p-4 text-[12px] leading-6 text-ink-3">
               <div className="mb-1 font-semibold text-ink-2">能自动识别的内容</div>
               <ul className="list-disc space-y-0.5 pl-4">
                 <li>
@@ -211,7 +211,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                   <b>清单表</b>：表头含「课程名称 / 星期 / 节次 / 地点」任意组合
                 </li>
                 <li>
-                  单元格里的 <code className="rounded bg-white px-1">课程名 / 教师（1-16周） / 地点</code> 会被自动拆开
+                  单元格里的 <code className="rounded bg-glass-thin px-1">课程名 / 教师（1-16周） / 地点</code> 会被自动拆开
                 </li>
                 <li>周次支持 1-16、1,3,5、第1-8周、单周、双周、每周</li>
               </ul>
@@ -240,7 +240,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             {/* 预览 */}
             <div className="mt-3 max-h-[240px] overflow-y-auto rounded-2xl border border-line">
               <table className="w-full border-collapse text-[12px]">
-                <thead className="sticky top-0 bg-slate-50 text-ink-3">
+                <thead className="sticky top-0 bg-surface-2 text-ink-3">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">课程</th>
                     <th className="px-2 py-2 text-left font-semibold">时间</th>
@@ -291,7 +291,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                   onClick={() => setMode(m)}
                   className={clsx(
                     'flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-colors',
-                    mode === m ? 'border-[#0A84FF]/60 bg-[#0A84FF]/[0.06]' : 'border-line hover:bg-slate-900/[0.03]',
+                    mode === m ? 'border-[#0A84FF]/60 bg-[#0A84FF]/[0.06]' : 'border-line hover:bg-surface-1',
                   )}
                 >
                   <span
@@ -311,7 +311,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               ))}
             </div>
 
-            <label className="mt-3 flex items-center justify-between rounded-2xl bg-slate-900/[0.03] px-3 py-2.5">
+            <label className="mt-3 flex items-center justify-between rounded-2xl bg-surface-1 px-3 py-2.5">
               <span>
                 <span className="block text-[12.5px] font-semibold">把第 1 教学周设为本周</span>
                 <span className="text-[11px] text-ink-3">否则请在「设置」里填写正确的开学日期</span>
@@ -419,7 +419,7 @@ export function ImportDropOverlay({ onFile }: { onFile: (f: File) => void }) {
         className="pointer-events-none absolute inset-0 grid place-items-center bg-[#0A84FF]/[0.08] transition-opacity duration-200"
         style={{ opacity: active ? 1 : 0 }}
       >
-        <div className="rounded-3xl border-2 border-dashed border-[#0A84FF]/60 bg-white/95 px-8 py-6 text-center shadow-[var(--shadow-float)]">
+        <div className="rounded-3xl border-2 border-dashed border-[#0A84FF]/60 bg-glass px-8 py-6 text-center shadow-[var(--shadow-float)]">
           <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[#0A84FF]/12 text-[#0A84FF]">
             <Icon name="import" size={22} />
           </div>

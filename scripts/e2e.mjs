@@ -290,7 +290,7 @@ check('卡片含课程名', Array.isArray(courseNames) && courseNames.length > 0
 const visibleText = await evaluate(`return document.body.innerText`)
 check('侧栏显示第 1 教学周', /第 1 教学周/.test(visibleText))
 check('待办面板显示 DDL 状态', /逾期|截止|项未完成/.test(visibleText))
-check('统计出未完成数量', /项未完成/.test(visibleText))
+check('统计出未完成数量', /项进行中|项未完成/.test(visibleText))
 check('今日 Hero 正常', /下一节课|正在上课|今天没有课/.test(visibleText))
 
 await shot('01-timetable')
@@ -448,6 +448,100 @@ await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }))
 await new Promise((r) => setTimeout(r, 1200))
 check('导入后出现课程卡片', (await evaluate(`return document.querySelectorAll('.tt-card').length`)) > 0)
 await shot('08-import-done')
+
+// 视图切换：周 / 月 / 学期
+const segLabels = await evaluate(`return Array.from(document.querySelectorAll('.segmented button')).map(b => b.textContent.trim())`)
+check('存在周/月/学期三种视图', JSON.stringify(segLabels) === JSON.stringify(['周视图', '月视图', '学期视图']), JSON.stringify(segLabels))
+
+const clickSeg = (label) =>
+  evaluate(`
+    Array.from(document.querySelectorAll('.segmented button')).find(b => b.textContent.trim() === ${JSON.stringify(label)})?.click();
+    return 'ok';
+  `)
+
+await clickSeg('月视图')
+await new Promise((r) => setTimeout(r, 1000))
+check('月视图渲染', (await evaluate(`return document.querySelectorAll('.month-cell').length`)) >= 5)
+check('月视图显示课程', /节课/.test(await evaluate(`return document.body.innerText`)))
+await shot('09-month')
+
+await clickSeg('学期视图')
+await new Promise((r) => setTimeout(r, 1200))
+const termText = await evaluate(`return document.body.innerText`)
+check('学期视图渲染', /全学期一览/.test(termText) && /课程清单/.test(termText))
+check('学期视图含学期进度', /学期进度/.test(termText))
+await shot('10-term')
+
+await clickSeg('周视图')
+await new Promise((r) => setTimeout(r, 800))
+check('切回周视图', (await evaluate(`return document.querySelectorAll('.tt-card').length`)) > 0)
+
+// 待办：勾选 → 完成 → 自动归档
+const todoBefore = await evaluate(`
+  const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+  return JSON.stringify({ open: s.state.todos.filter(t => !t.archived && !t.done).length, arch: s.state.todos.filter(t => t.archived).length });
+`)
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().startsWith('进行中'))?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 700))
+const checked = await evaluate(`
+  const b = document.querySelector('.checkbox');
+  if (!b) return 'none';
+  b.click();
+  return 'ok';
+`)
+check('可以勾选待办', checked === 'ok', String(checked))
+await new Promise((r) => setTimeout(r, 1800))
+const todoAfter = await evaluate(`
+  const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+  return JSON.stringify({ open: s.state.todos.filter(t => !t.archived && !t.done).length, arch: s.state.todos.filter(t => t.archived).length });
+`)
+const before = JSON.parse(todoBefore)
+const after = JSON.parse(todoAfter)
+check('勾选后自动归档', after.arch !== before.arch, `${todoBefore} -> ${todoAfter}`)
+check('未完成数量减少', after.open < before.open, `${todoBefore} -> ${todoAfter}`)
+await shot('11-todo-archive')
+
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().startsWith('归档'))?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 900))
+check('归档页可查看已完成', /已完成/.test(await evaluate(`return document.body.innerText`)))
+await shot('12-archive-tab')
+
+// 主题切换
+const setTheme = (mode) =>
+  evaluate(`
+    const raw = JSON.parse(localStorage.getItem('lumen-course-v1'));
+    raw.state.settings.theme = ${JSON.stringify(mode)};
+    localStorage.setItem('lumen-course-v1', JSON.stringify(raw));
+    return 'ok';
+  `)
+await setTheme('dark')
+await send('Page.reload', { ignoreCache: false })
+await waitReady()
+await new Promise((r) => setTimeout(r, 2200))
+check('深色主题生效', (await evaluate(`return document.documentElement.dataset.theme`)) === 'dark')
+check('深色下文字色变浅', (await evaluate(`return getComputedStyle(document.body).color`)) !== 'rgb(11, 18, 32)')
+await shot('13-dark')
+await setTheme('light')
+await send('Page.reload', { ignoreCache: false })
+await waitReady()
+await new Promise((r) => setTimeout(r, 2200))
+check('浅色主题生效', (await evaluate(`return document.documentElement.dataset.theme`)) === 'light')
+await shot('14-light')
+await setTheme('system')
+
+// 自定义标题栏（桌面端）
+if (TARGET_HINT.includes('tauri')) {
+  check('自绘标题栏存在', await evaluate(`return !!document.querySelector('.titlebar')`))
+  check('窗口外壳有圆角', (await evaluate(`return getComputedStyle(document.querySelector('.window-shell')).borderRadius`)) !== '0px')
+  const btns = await evaluate(`return Array.from(document.querySelectorAll('.titlebar-btn')).map(b => b.title)`)
+  check('标题栏含最小化/最大化/关闭', JSON.stringify(btns).includes('最小化') && JSON.stringify(btns).includes('关闭'), JSON.stringify(btns))
+}
 
 const consoleErrors = await evaluate(`return window.__lumenErrors ? window.__lumenErrors.length : 0`)
 check('无未捕获错误标记', consoleErrors === 0, `errors=${consoleErrors}`)

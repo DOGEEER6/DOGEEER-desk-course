@@ -94,6 +94,8 @@ export interface Todo {
   completedAt?: string
   /** 是否已提醒 */
   notified?: boolean
+  /** 已完成并归入归档 */
+  archived?: boolean
 }
 
 /** 周次范围，用于学期设置里的"教学周" */
@@ -123,6 +125,12 @@ export interface AppSettings {
   showWeekend: boolean
   /** 提醒检查间隔（秒） */
   tickSeconds: number
+  /** 浮窗是否固定在桌面最前 */
+  miniAlwaysOnTop: boolean
+  /** 主题：跟随系统 / 浅色 / 深色 */
+  theme?: 'system' | 'light' | 'dark'
+  /** 浮窗开机自启 */
+  miniAutoStart?: boolean
 }
 
 export interface ImportReportRow {

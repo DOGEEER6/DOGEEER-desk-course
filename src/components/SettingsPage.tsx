@@ -15,6 +15,7 @@ import {
   setMiniAlwaysOnTop,
   showMiniWindow,
 } from '../lib/desktop'
+import { setTheme, type ThemeMode } from '../lib/theme'
 
 export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const settings = useApp((s) => s.settings)
@@ -32,7 +33,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const [perm, setPerm] = useState<PermissionState | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const [autoStart, setAutoStartState] = useState<boolean | null>(null)
-  const [miniOnTop, setMiniOnTopState] = useState(true)
+  const [miniOnTop, setMiniOnTopState] = useState(!!settings.miniAlwaysOnTop)
   const week = currentWeek({ settings, previewWeek: null })
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
                 {semesterProgress.done}/{semesterProgress.total}
               </span>
             </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-900/8">
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#3AA0FF] to-[#0A84FF] transition-[width] duration-500"
                 style={{ width: `${semesterProgress.percent}%` }}
@@ -216,12 +217,20 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
                 disabled={!isDesktop()}
                 onChange={async (v) => {
                   setMiniOnTopState(v)
+                  updateSettings({ miniAlwaysOnTop: v })
                   await setMiniAlwaysOnTop(v)
+                  toast(v ? '浮窗已固定在桌面最前' : '浮窗已取消固定', {
+                    desc: v ? '浮窗会盖在其他窗口上方' : '浮窗在桌面上，可被其他窗口覆盖',
+                    tone: 'success',
+                    duration: 2600,
+                  })
                 }}
               />
               <span>
-                <span className="block text-[12.5px] font-semibold">浮窗始终置顶</span>
-                <span className="text-[11px] text-ink-3">取消后可被其他窗口覆盖</span>
+                <span className="block text-[12.5px] font-semibold">固定在桌面最前</span>
+                <span className="text-[11px] text-ink-3">
+                  关闭时浮窗就在桌面上，可被其他窗口盖住（默认）
+                </span>
               </span>
             </label>
 
@@ -250,11 +259,32 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
           </div>
         </Card>
 
+        {/* 外观 */}
+        <Card title="外观" icon="sparkle">
+          <Row label="主题">
+            <Segmented<ThemeMode>
+              value={settings.theme ?? 'system'}
+              onChange={(v) => {
+                setTheme(v)
+                updateSettings({ theme: v })
+              }}
+              options={[
+                { value: 'system', label: '跟随系统' },
+                { value: 'light', label: '浅色' },
+                { value: 'dark', label: '深色' },
+              ]}
+            />
+          </Row>
+          <p className="mt-2 text-[11px] leading-5 text-ink-4">
+            深色模式适合深色桌面壁纸，浮窗与主界面会一起切换。
+          </p>
+        </Card>
+
         {/* 节次时间 */}
         <Card title="节次时间" icon="clock" className="col-span-2">
           <div className="grid grid-cols-4 gap-2">
             {periods.map((p, i) => (
-              <div key={p.index} className="rounded-2xl border border-line bg-white/60 px-3 py-2">
+              <div key={p.index} className="rounded-2xl border border-line bg-glass-thin px-3 py-2">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-[12px] font-bold text-ink-2">第 {p.index} 节</span>
                   <div className="flex gap-1">
@@ -423,7 +453,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
           </div>
 
           {lastImport && (
-            <div className="mt-3 rounded-2xl bg-slate-900/[0.03] p-3 text-[11.5px] leading-5 text-ink-3">
+            <div className="mt-3 rounded-2xl bg-surface-1 p-3 text-[11.5px] leading-5 text-ink-3">
               <div className="font-semibold text-ink-2">最近一次导入</div>
               <div>
                 {lastImport.fileName} · {new Date(lastImport.at).toLocaleString('zh-CN')}
@@ -484,7 +514,7 @@ function Card({
   return (
     <section className={clsx('glass rounded-[22px] p-4', className)}>
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-lg bg-slate-900/[0.05] text-ink-3">
+        <span className="grid h-6 w-6 place-items-center rounded-lg bg-surface-2 text-ink-3">
           <Icon name={icon} size={13} />
         </span>
         <h3 className="text-[13.5px] font-bold tracking-[-0.01em]">{title}</h3>
@@ -513,7 +543,7 @@ function Row({
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
-    <div className="rounded-2xl bg-slate-900/[0.03] py-3">
+    <div className="rounded-2xl bg-surface-1 py-3">
       <div className="tabular text-[22px] font-bold leading-none text-ink">{value}</div>
       <div className="mt-1 text-[11px] text-ink-3">{label}</div>
     </div>
@@ -522,7 +552,7 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded-md border border-line bg-white px-1.5 py-[1px] text-[10.5px] font-semibold text-ink-2">
+    <kbd className="rounded-md border border-line bg-glass-thin px-1.5 py-[1px] text-[10.5px] font-semibold text-ink-2">
       {children}
     </kbd>
   )

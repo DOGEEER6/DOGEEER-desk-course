@@ -126,6 +126,7 @@ export function useReminderEngine() {
 
       // ---- 开课提醒 ----
       for (const c of courses) {
+        if (c.archived) continue
         for (const s of c.sessions) {
           if (s.day !== weekday) continue
           if (s.remind === false) continue
@@ -159,11 +160,13 @@ export function useReminderEngine() {
 
       // ---- DDL 提醒 ----
       for (const t of todos) {
-        if (t.done || !t.dueAt) continue
+        if (t.done || t.archived || !t.dueAt) continue
         const due = new Date(t.dueAt)
         if (Number.isNaN(due.getTime())) continue
         const ms = due.getTime() - now.getTime()
         const hours = ms / 3600000
+        // 只提醒「刚到期」的：逾期超过 12 小时就不再打扰
+        if (ms < -12 * 3600000) continue
         const stage = ms < 0 ? 'over' : hours <= 1 ? 'h1' : hours <= 24 ? 'h24' : null
         if (!stage) continue
         const key = firedKey('todo', t.id, stage)

@@ -107,18 +107,36 @@ pub fn run() {
             get_autostart
         ])
         .setup(|app| {
-            // 浮窗常驻置顶
+            // 浮窗：不置顶（在桌面上就行），并使用 Windows 11 的 Mica 材质做毛玻璃
             if let Some(mini) = app.get_webview_window("mini") {
-                let _ = mini.set_always_on_top(true);
+                let _ = mini.set_always_on_top(false);
+                #[cfg(target_os = "windows")]
+                {
+                    use tauri::window::{Effect, EffectState, EffectsBuilder};
+                    let _ = mini.set_effects(
+                        EffectsBuilder::new()
+                            .effect(Effect::Mica)
+                            .state(EffectState::Active)
+                            .build(),
+                    );
+                }
             }
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 关闭主窗口时保留浮窗（回到「只有浮窗」的状态）
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
+                match window.label() {
+                    // 关闭主窗口 = 收起为浮窗（回到「只有浮窗」的状态）
+                    "main" => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    // 浮窗的 × 只是隐藏，不要退出整个应用
+                    "mini" => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    _ => {}
                 }
             }
         })

@@ -15,12 +15,14 @@ import { playChime } from '../lib/notify'
 
 const WEEK_WORD: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 }
 
-export function parseQuickInput(input: string, now = new Date()): { title: string; dueAt?: string; priority: TodoPriority } {
+export function parseQuickInput(
+  input: string,
+  now = new Date(),
+): { title: string; dueAt?: string; priority: TodoPriority } {
   let text = input.trim()
   let priority: TodoPriority = 'normal'
   let due: Date | null = null
 
-  // 优先级
   if (/(^|\s)!(high|高|急)/i.test(text)) {
     priority = 'high'
     text = text.replace(/(^|\s)!(high|高|急)/gi, ' ')
@@ -36,7 +38,6 @@ export function parseQuickInput(input: string, now = new Date()): { title: strin
   }
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
-  // 时间：14:30 / 下午3点 / 晚上8点
   let hour = 23
   let minute = 59
   const tm = /(\d{1,2})[:：](\d{2})/.exec(text)
@@ -58,8 +59,7 @@ export function parseQuickInput(input: string, now = new Date()): { title: strin
     }
   }
 
-  // 日期
-  const dmy = /(\d{1,2})\s*[月\/]\s*(\d{1,2})\s*[日号]?/.exec(text)
+  const dmy = /(\d{1,2})\s*[月/]\s*(\d{1,2})\s*[日号]?/.exec(text)
   const iso = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(text)
   if (iso) {
     due = at(new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])), hour, minute)
@@ -106,7 +106,10 @@ export function parseQuickInput(input: string, now = new Date()): { title: strin
 /* 待办面板                                                            */
 /* ------------------------------------------------------------------ */
 
-type FilterKey = 'open' | 'today' | 'week' | 'done'
+type FilterKey = 'open' | 'today' | 'week' | 'archive'
+
+/** 完成后的归档延迟：先让用户看到打勾，再收进归档 */
+const ARCHIVE_DELAY = 900
 
 export function TodoPanel({ compact = false }: { compact?: boolean }) {
   const todos = useApp((s) => s.todos)
@@ -115,14 +118,16 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
   const toggleTodo = useApp((s) => s.toggleTodo)
   const updateTodo = useApp((s) => s.updateTodo)
   const removeTodo = useApp((s) => s.removeTodo)
-  const clearCompleted = useApp((s) => s.clearCompleted)
+  const archiveTodo = useApp((s) => s.archiveTodo)
+  const restoreTodo = useApp((s) => s.restoreTodo)
+  const clearArchived = useApp((s) => s.clearArchived)
 
   const [filter, setFilter] = useState<FilterKey>('open')
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
+  const [justDone, setJustDone] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 全局快捷键 Ctrl/⌘+K 聚焦到快速添加
   useEffect(() => {
     const onFocus = () => inputRef.current?.focus()
     window.addEventListener('lumen:focus-todo', onFocus)
@@ -131,6 +136,18 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
 
   const now = new Date()
 
+  /** 统计：归档项不计入未完成 */
+  const stats = useMemo(() => {
+    const active = todos.filter((t) => !t.archived)
+    const open = active.filter((t) => !t.done)
+    const overdue = open.filter((t) => t.dueAt && new Date(t.dueAt).getTime() < now.getTime()).length
+    const next = open
+      .filter((t) => t.dueAt && new Date(t.dueAt).getTime() >= now.getTime())
+      .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())[0]
+    const archived = todos.filter((t) => t.archived).length
+    return { open: open.length, overdue, next, archived }
+  }, [todos, now])
+
   const filtered = useMemo(() => {
     const byDue = (a: Todo, b: Todo) => {
       const av = a.dueAt ? new Date(a.dueAt).getTime() : Infinity
@@ -138,36 +155,55 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
       if (av !== bv) return av - bv
       return a.createdAt.localeCompare(b.createdAt)
     }
-    const open = todos.filter((t) => !t.done)
+    const active = todos.filter((t) => !t.archived)
+    const open = active.filter((t) => !t.done)
     switch (filter) {
       case 'open':
         return [...open].sort(byDue)
       case 'today': {
         const today = dateKey(now)
-        return open
-          .filter((t) => (t.dueAt ? dateKey(new Date(t.dueAt)) <= today : false))
-          .sort(byDue)
+        return open.filter((t) => (t.dueAt ? dateKey(new Date(t.dueAt)) <= today : false)).sort(byDue)
       }
       case 'week': {
         const limit = now.getTime() + 7 * 86400000
         return open.filter((t) => t.dueAt && new Date(t.dueAt).getTime() <= limit).sort(byDue)
       }
-      case 'done':
-        return [...todos.filter((t) => t.done)].sort((a, b) =>
-          (b.completedAt ?? '').localeCompare(a.completedAt ?? ''),
-        )
+      case 'archive':
+        return todos
+          .filter((t) => t.archived)
+          .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
     }
   }, [todos, filter, now])
 
-  const stats = useMemo(() => {
-    const open = todos.filter((t) => !t.done)
-    const overdue = open.filter((t) => t.dueAt && new Date(t.dueAt).getTime() < now.getTime()).length
-    const today = open.filter((t) => t.dueAt && dateKey(new Date(t.dueAt)) === dateKey(now)).length
-    const next = open
-      .filter((t) => t.dueAt && new Date(t.dueAt).getTime() >= now.getTime())
-      .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())[0]
-    return { open: open.length, overdue, today, next }
-  }, [todos, now])
+  /** 勾选 / 取消勾选：勾上后延迟收进归档，并给一次撤销机会 */
+  const handleCheck = (t: Todo) => {
+    if (t.done) {
+      toggleTodo(t.id, false)
+      setJustDone((s) => {
+        const n = new Set(s)
+        n.delete(t.id)
+        return n
+      })
+      return
+    }
+    toggleTodo(t.id, true)
+    playChime('done')
+    setJustDone((s) => new Set(s).add(t.id))
+    window.setTimeout(() => {
+      useApp.getState().archiveTodo(t.id)
+      setJustDone((s) => {
+        const n = new Set(s)
+        n.delete(t.id)
+        return n
+      })
+    }, ARCHIVE_DELAY)
+    toast('已完成并归档', {
+      desc: t.title,
+      tone: 'success',
+      duration: 4200,
+      action: { label: '撤销', onClick: () => restoreTodo(t.id) },
+    })
+  }
 
   const submit = () => {
     const raw = draft.trim()
@@ -177,129 +213,158 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
     setDraft('')
     if (parsed.dueAt) {
       const d = new Date(parsed.dueAt)
-      toast('已加入待办', { desc: `DDL ${d.getMonth() + 1}月${d.getDate()}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`, tone: 'success', duration: 2200 })
+      toast('已加入待办', {
+        desc: `DDL ${d.getMonth() + 1}月${d.getDate()}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+        tone: 'success',
+        duration: 2200,
+      })
     }
   }
 
+  const FILTERS: [FilterKey, string][] = [
+    ['open', '进行中'],
+    ['today', '今天'],
+    ['week', '近 7 天'],
+    ['archive', '归档'],
+  ]
+
   return (
-    <div className={clsx('flex min-h-0 flex-col', compact ? 'h-full' : '')}>
+    <div className={clsx('flex min-h-0 w-full flex-col', compact && 'h-full')}>
       {/* 头部 */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-[17px] font-bold tracking-[-0.02em]">待办与作业</h2>
-            {stats.open > 0 && (
-              <span className="rounded-full bg-[#0A84FF]/12 px-2 py-[1px] text-[11px] font-bold text-[#0A84FF]">
-                {stats.open} 项未完成
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-[12px] text-ink-3">
-            {stats.overdue > 0 ? (
-              <span className="font-semibold text-[#D62A20]">{stats.overdue} 项已逾期 · </span>
-            ) : null}
-            {stats.next?.dueAt ? (
-              <>
-                下一个 DDL：{stats.next.title}（{humanLeft(new Date(stats.next.dueAt).getTime() - now.getTime())}后）
-              </>
-            ) : (
-              '暂无临近截止的任务'
-            )}
-          </p>
+      <div className="flex-none">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[16px] font-bold tracking-[-0.02em]">待办与作业</h2>
+          {stats.open > 0 && (
+            <span className="flex-none rounded-full bg-[#0A84FF]/12 px-2 py-[1px] text-[10.5px] font-bold text-[#0A84FF]">
+              {stats.open} 项进行中
+            </span>
+          )}
         </div>
-        {todos.some((t) => t.done) && (
-          <button className="btn btn-ghost h-7 px-2.5 text-[11.5px]" onClick={clearCompleted}>
-            清理已完成
-          </button>
-        )}
-      </div>
+        <p className="mt-0.5 truncate text-[11.5px] text-ink-3">
+          {stats.overdue > 0 ? (
+            <span className="font-semibold text-[#D62A20]">{stats.overdue} 项逾期 · </span>
+          ) : null}
+          {stats.next?.dueAt ? (
+            <>
+              下一个 DDL：{stats.next.title}（{humanLeft(new Date(stats.next.dueAt).getTime() - now.getTime())}后）
+            </>
+          ) : (
+            '暂无临近截止的任务'
+          )}
+        </p>
 
-      {/* 快速添加 */}
-      <div className="mt-3 flex items-center gap-2">
-        <div className="relative flex-1">
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4">
-            <Icon name="plus" size={15} />
+        {/* 快速添加 */}
+        <div className="mt-2.5 flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4">
+              <Icon name="plus" size={15} />
+            </div>
+            <input
+              ref={inputRef}
+              className="field pl-9"
+              placeholder="例如：操作系统实验报告 周五 18:00 !high"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit()
+              }}
+            />
           </div>
-          <input
-            ref={inputRef}
-            className="field pl-9"
-            placeholder="例如：操作系统实验报告 周五 18:00 !high"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submit()
-            }}
-          />
-        </div>
-        <button className="btn btn-primary h-9 px-4 text-[12.5px]" onClick={submit}>
-          添加
-        </button>
-      </div>
-
-      {/* 筛选 */}
-      <div className="mt-3 flex items-center gap-1">
-        {(
-          [
-            ['open', '全部'],
-            ['today', '今天'],
-            ['week', '近 7 天'],
-            ['done', '已完成'],
-          ] as [FilterKey, string][]
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setFilter(k)}
-            className={clsx(
-              'rounded-full px-3 py-[5px] text-[12px] font-semibold transition-colors',
-              filter === k ? 'bg-ink text-white' : 'bg-slate-900/[0.05] text-ink-3 hover:bg-slate-900/[0.09]',
-            )}
-          >
-            {label}
+          <button className="btn btn-primary h-9 flex-none px-4 text-[12.5px]" onClick={submit}>
+            添加
           </button>
-        ))}
+        </div>
+
+        {/* 筛选：容器窄时可横向滚动，避免按钮文字被裁切 */}
+        <div className="no-scrollbar -mx-0.5 mt-2.5 flex items-center gap-1 overflow-x-auto px-0.5 pb-0.5">
+          {FILTERS.map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setFilter(k)}
+              className={clsx(
+                'flex-none whitespace-nowrap rounded-full px-2.5 py-[5px] text-[11.5px] font-semibold transition-colors',
+                filter === k ? 'bg-ink text-[var(--c-bg-solid)]' : 'bg-surface-1 text-ink-3 hover:bg-surface-2',
+              )}
+            >
+              {label}
+              {k === 'archive' && stats.archived > 0 && <span className="ml-1 opacity-70">{stats.archived}</span>}
+            </button>
+          ))}
+          {filter === 'archive' && stats.archived > 0 && (
+            <button
+              className="ml-auto flex-none whitespace-nowrap rounded-full px-2.5 py-[5px] text-[11.5px] font-semibold text-[#D62A20] hover:bg-[#FF3B30]/10"
+              onClick={() => {
+                clearArchived()
+                toast('已清空归档', { tone: 'info' })
+              }}
+            >
+              清空归档
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 列表 */}
-      <div className={clsx('scroll-y mt-2 min-h-0 flex-1 pr-1', compact ? '' : 'max-h-[320px]')}>
+      <div className="scroll-y mt-1.5 min-h-0 flex-1 pr-1">
         <AnimatePresence initial={false}>
           {filtered.map((t) => {
             const due = dueLabel(t.dueAt, now)
             const course = t.courseId ? courses.find((c) => c.id === t.courseId) : undefined
             const color = course ? colorOf(course.color) : null
             const isEditing = editing === t.id
+            const isArchived = !!t.archived
+            const pending = justDone.has(t.id)
+
             return (
               <motion.div
                 key={t.id}
                 layout
-                initial={{ opacity: 0, y: -6, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, x: 24, height: 0 }}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: 28, height: 0, marginTop: 0 }}
                 transition={springSoft}
                 className="group overflow-hidden"
               >
-                <div className="flex items-start gap-3 border-b border-line px-1 py-2.5">
-                  <button
-                    className="checkbox mt-[2px]"
-                    data-done={t.done}
-                    onClick={() => {
-                      const next = !t.done
-                      toggleTodo(t.id, next)
-                      if (next) playChime('done')
-                    }}
-                    aria-label="完成"
-                  >
-                    <motion.svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      initial={false}
-                      animate={{ scale: t.done ? 1 : 0.4, opacity: t.done ? 1 : 0 }}
-                      transition={springSnappy}
+                <div className="flex items-start gap-2.5 border-b border-line py-2.5">
+                  {/* 勾选 / 恢复 */}
+                  {isArchived ? (
+                    <button
+                      className="mt-[1px] grid h-[22px] w-[22px] flex-none place-items-center rounded-full bg-[#34C759]/20 text-[#1D9E45] transition-transform hover:scale-105 active:scale-90"
+                      onClick={() => restoreTodo(t.id)}
+                      title="从归档恢复到进行中"
+                      aria-label="恢复"
                     >
-                      <path d="M2 6.4l2.6 2.6L10 3.4" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-                    </motion.svg>
-                  </button>
+                      <Icon name="check" size={12} strokeWidth={2.4} />
+                    </button>
+                  ) : (
+                    <button
+                      className={clsx('checkbox mt-[1px]', pending && 'ring-2 ring-[#34C759]/35')}
+                      data-done={t.done}
+                      onClick={() => handleCheck(t)}
+                      aria-label={t.done ? '取消完成' : '标记完成'}
+                    >
+                      <motion.svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        initial={false}
+                        animate={{ scale: t.done ? 1 : 0.4, opacity: t.done ? 1 : 0 }}
+                        transition={springSnappy}
+                      >
+                        <motion.path
+                          d="M2 6.4l2.6 2.6L10 3.4"
+                          stroke="#fff"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          initial={false}
+                          animate={{ pathLength: t.done ? 1 : 0 }}
+                          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                        />
+                      </motion.svg>
+                    </button>
+                  )}
 
                   <div className="min-w-0 flex-1">
                     {isEditing ? (
@@ -319,13 +384,13 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
                     ) : (
                       <div
                         className={clsx(
-                          'cursor-text text-[13.5px] font-semibold leading-5',
-                          t.done && 'text-ink-4 line-through',
+                          'cursor-text text-[13px] font-semibold leading-5 transition-colors',
+                          (t.done || isArchived) && 'text-ink-4 line-through',
                         )}
-                        onDoubleClick={() => setEditing(t.id)}
-                        title="双击重命名"
+                        onDoubleClick={() => !isArchived && setEditing(t.id)}
+                        title={isArchived ? t.title : '双击重命名'}
                       >
-                        {t.priority === 'high' && (
+                        {t.priority === 'high' && !isArchived && (
                           <span className="mr-1 inline-block align-middle text-[#FF3B30]">
                             <Icon name="flag" size={12} />
                           </span>
@@ -334,59 +399,74 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
                       </div>
                     )}
 
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className={clsx('text-[11px] font-medium', toneClass(due.tone))}>{due.text}</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {isArchived ? (
+                        <span className="text-[10.5px] text-ink-4">
+                          已完成
+                          {t.completedAt
+                            ? ` ${new Date(t.completedAt).getMonth() + 1}/${new Date(t.completedAt).getDate()}`
+                            : ''}
+                        </span>
+                      ) : (
+                        <span className={clsx('text-[10.5px] font-medium', toneClass(due.tone))}>{due.text}</span>
+                      )}
                       {course && color && (
                         <span
-                          className="rounded-full px-1.5 py-[1px] text-[10.5px] font-semibold"
+                          className="max-w-[140px] truncate rounded-full px-1.5 py-[1px] text-[10px] font-semibold"
                           style={{ background: color.from, color: color.text }}
                         >
                           {course.name}
                         </span>
                       )}
-                      {t.startAt && (
-                        <span className="text-[10.5px] text-ink-4">
-                          计划 {new Date(t.startAt).getMonth() + 1}/{new Date(t.startAt).getDate()}
-                        </span>
-                      )}
                     </div>
                   </div>
 
-                  {/* 快捷操作 */}
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  {/* 行内操作 */}
+                  <div className="flex flex-none items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                    {!isArchived && (
+                      <>
+                        <label
+                          className="btn h-7 w-7 cursor-pointer text-ink-4 hover:bg-surface-2 hover:text-[#0A84FF]"
+                          title="设置 / 修改 DDL"
+                        >
+                          <Icon name="clock" size={13} />
+                          <input
+                            type="datetime-local"
+                            className="sr-only"
+                            value={toLocalInput(t.dueAt)}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              updateTodo(t.id, {
+                                dueAt: v ? new Date(v).toISOString() : undefined,
+                                notified: false,
+                              })
+                            }}
+                          />
+                        </label>
+                        <button
+                          className="btn h-7 w-7 text-ink-4 hover:bg-surface-2 hover:text-[#1D9E45]"
+                          title="直接归档"
+                          onClick={() => archiveTodo(t.id)}
+                        >
+                          <Icon name="download" size={13} />
+                        </button>
+                      </>
+                    )}
                     <button
-                      className="btn btn-ghost h-6 px-2 text-[11px]"
-                      onClick={() => {
-                        const el = document.getElementById(`due-${t.id}`) as HTMLInputElement | null
-                        el?.showPicker?.()
-                        el?.focus()
-                      }}
-                      title="修改 DDL"
-                    >
-                      <Icon name="clock" size={12} />
-                    </button>
-                    <button
-                      className="btn btn-ghost h-6 px-2 text-[11px]"
-                      onClick={() => removeTodo(t.id)}
+                      className="btn h-7 w-7 text-ink-4 hover:bg-[#FF3B30]/10 hover:text-[#D62A20]"
                       title="删除"
+                      onClick={() => {
+                        removeTodo(t.id)
+                        toast('已删除', {
+                          tone: 'info',
+                          duration: 3200,
+                          action: { label: '撤销', onClick: () => addTodo({ ...t, id: t.id }) },
+                        })
+                      }}
                     >
-                      <Icon name="trash" size={12} />
+                      <Icon name="trash" size={13} />
                     </button>
                   </div>
-                </div>
-
-                {/* 隐藏的原生日期选择器 */}
-                <div className="relative h-0">
-                  <input
-                    id={`due-${t.id}`}
-                    type="datetime-local"
-                    className="absolute right-0 top-[-30px] h-7 w-[180px] rounded-lg border border-line bg-white px-2 text-[11px] opacity-0 focus:opacity-100"
-                    value={toLocalInput(t.dueAt)}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      updateTodo(t.id, { dueAt: v ? new Date(v).toISOString() : undefined, notified: false })
-                    }}
-                  />
                 </div>
               </motion.div>
             )
@@ -395,11 +475,17 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
 
         {filtered.length === 0 && (
           <div className="grid place-items-center py-10 text-center">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-900/5 text-ink-4">
-              <Icon name="checkCircle" size={20} />
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-surface-1 text-ink-4">
+              <Icon name={filter === 'archive' ? 'download' : 'checkCircle'} size={20} />
             </div>
             <div className="mt-2 text-[12.5px] text-ink-3">
-              {filter === 'done' ? '还没有已完成的任务' : '太棒了，这里已经清空'}
+              {filter === 'archive'
+                ? '归档是空的，完成的待办会自动收进这里'
+                : filter === 'today'
+                  ? '今天没有到期的任务'
+                  : filter === 'week'
+                    ? '近 7 天没有到期的任务'
+                    : '太棒了，这里已经清空'}
             </div>
           </div>
         )}

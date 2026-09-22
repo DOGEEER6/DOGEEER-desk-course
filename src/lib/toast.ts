@@ -30,7 +30,8 @@ export const useToastStore = create<ToastState>((set) => ({
   push: (t) => {
     const id = t.id ?? `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
     set((s) => ({
-      toasts: [...s.toasts.filter((x) => x.id !== id), { ...t, id, createdAt: Date.now() }].slice(-4),
+      // 最多同时保留 3 条，避免铺满屏幕遮挡界面
+      toasts: [...s.toasts.filter((x) => x.id !== id), { ...t, id, createdAt: Date.now() }].slice(-3),
     }))
     if (t.duration > 0) {
       window.setTimeout(() => {

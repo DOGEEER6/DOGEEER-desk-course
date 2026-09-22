@@ -295,8 +295,8 @@ export function Overlay({
       {open && (
         <div className="fixed inset-0 z-[60]">
           <motion.div
-            className="absolute inset-0 bg-slate-900/25"
-            style={{ backdropFilter: 'blur(3px)' }}
+            className="absolute inset-0"
+            style={{ background: 'var(--c-scrim)', backdropFilter: 'blur(3px)' }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

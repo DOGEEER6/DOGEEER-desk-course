@@ -1,10 +1,12 @@
 /**
- * 极简桌面浮窗：只显示「今天」
- *  - 今日课程（点击展开：教师/地点/该课作业与 DDL）
- *  - 即将到期的 DDL 汇总
- *  - 一键打开完整课表
+ * 极简桌面浮窗（DOGEEER 今日）
+ *
+ *  - 只显示「今天」：今日课程 + 全部作业 DDL 汇总
+ *  - 点击课程卡片展开教师 / 地点 / 该课作业与截止时间
+ *  - 默认可被普通窗口覆盖（不置顶），可在设置里「固定在桌面最前」
+ *  - 记住位置与大小；不透明毛玻璃卡片，适配深色桌面
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import clsx from 'clsx'
 import { useApp } from '../store'
@@ -14,14 +16,51 @@ import { colorOf } from '../lib/palette'
 import { dueLabel, pad2, sessionCoversWeek, weekIndexOf } from '../lib/time'
 import { Icon, springSnappy, springSoft } from '../components/ui'
 import { useNow } from '../hooks'
+import { hideCurrentWindow, isDesktop, setMiniAlwaysOnTop, showMainWindow } from '../lib/desktop'
 
-/* ---------------- Tauri 桥接（浏览器下自动降级为 no-op） ---------------- */
+/* ---------------- 窗口位置/大小持久化 ---------------- */
 
-import { hideCurrentWindow, showMainWindow } from '../lib/desktop'
+const GEOM_KEY = 'lumen-mini-geom'
 
-async function openApp() {
-  const done = await showMainWindow()
-  if (done == null) window.open('/', '_blank')
+interface MiniGeom {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+interface GeoWindow {
+  outerPosition?: () => Promise<{ x: number; y: number }>
+  outerSize?: () => Promise<{ width: number; height: number }>
+  setPosition?: (p: { x: number; y: number }) => Promise<void>
+  setSize?: (s: { width: number; height: number }) => Promise<void>
+  onMoved?: (cb: () => void) => Promise<() => void>
+  onResized?: (cb: () => void) => Promise<() => void>
+}
+
+function geoWindow(): GeoWindow | undefined {
+  const g = (window as unknown as { __TAURI__?: { window?: { getCurrentWindow?: () => GeoWindow } } }).__TAURI__
+  return g?.window?.getCurrentWindow?.()
+}
+
+function readGeom(): MiniGeom | null {
+  try {
+    const raw = localStorage.getItem(GEOM_KEY)
+    if (!raw) return null
+    const g = JSON.parse(raw) as MiniGeom
+    if ([g.x, g.y, g.w, g.h].every((n) => typeof n === 'number' && Number.isFinite(n))) return g
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function saveGeom(g: MiniGeom) {
+  try {
+    localStorage.setItem(GEOM_KEY, JSON.stringify(g))
+  } catch {
+    /* ignore */
+  }
 }
 
 /* ---------------- 组件 ---------------- */
@@ -43,10 +82,54 @@ export default function MiniWidget() {
   const todos = useApp((s) => s.todos)
   const periods = useApp((s) => s.periods)
   const settings = useApp((s) => s.settings)
+  const miniPinned = useApp((s) => s.settings.miniAlwaysOnTop)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const restored = useRef(false)
 
   const week = weekIndexOf(settings.semester.startDate, now)
   const weekday = (now.getDay() === 0 ? 7 : now.getDay()) as Weekday
+
+  /* 恢复窗口位置与大小 + 应用置顶偏好（只做一次） */
+  useEffect(() => {
+    if (!isDesktop() || restored.current) return
+    restored.current = true
+    const win = geoWindow()
+    if (!win) return
+
+    const g = readGeom()
+    if (g) {
+      void win.setPosition?.({ x: g.x, y: g.y })
+      void win.setSize?.({ width: g.w, height: g.h })
+    }
+    void setMiniAlwaysOnTop(!!useApp.getState().settings.miniAlwaysOnTop)
+
+    let unMoved: (() => void) | undefined
+    let unResized: (() => void) | undefined
+    const persist = async () => {
+      try {
+        const [pos, size] = await Promise.all([win.outerPosition?.(), win.outerSize?.()])
+        if (pos && size) saveGeom({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+      } catch {
+        /* ignore */
+      }
+    }
+    void win.onMoved?.(() => void persist()).then((fn) => {
+      unMoved = fn
+    })
+    void win.onResized?.(() => void persist()).then((fn) => {
+      unResized = fn
+    })
+    return () => {
+      unMoved?.()
+      unResized?.()
+    }
+  }, [])
+
+  /* 用户切换「固定」时同步到窗口 */
+  useEffect(() => {
+    if (!isDesktop()) return
+    void setMiniAlwaysOnTop(!!miniPinned)
+  }, [miniPinned])
 
   /* ---- 今日课程 ---- */
   const rows = useMemo<Row[]>(() => {
@@ -70,7 +153,7 @@ export default function MiniWidget() {
           endMin: toMin(b?.end ?? a?.end),
           room: s.room ?? c.room,
           teacher: s.teacher ?? c.teacher,
-          todos: todos.filter((t) => t.courseId === c.id),
+          todos: todos.filter((t) => t.courseId === c.id && !t.archived),
         })
       }
     }
@@ -81,65 +164,72 @@ export default function MiniWidget() {
   const current = rows.find((r) => nowMin >= r.startMin && nowMin <= r.endMin) ?? null
   const next = rows.find((r) => r.startMin > nowMin) ?? null
 
-  /* ---- 全局 DDL 汇总 ---- */
+  /* ---- 全局 DDL ---- */
+  const openTodos = useMemo(() => todos.filter((t) => !t.done && !t.archived), [todos])
   const upcoming = useMemo(() => {
-    const open = todos.filter((t) => !t.done && t.dueAt)
-    const overdue = open.filter((t) => new Date(t.dueAt!).getTime() < now.getTime())
-    const soon = open
+    const withDue = openTodos.filter((t) => t.dueAt)
+    const overdue = withDue.filter((t) => new Date(t.dueAt!).getTime() < now.getTime())
+    const soon = withDue
       .filter((t) => new Date(t.dueAt!).getTime() >= now.getTime())
       .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
     return { overdue, soon: soon.slice(0, 3) }
-  }, [todos, now])
+  }, [openTodos, now])
 
-  const openCount = todos.filter((t) => !t.done).length
+  const openCount = openTodos.length
+  const hasDdlSection = upcoming.overdue.length > 0 || upcoming.soon.length > 0
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden" style={{ background: 'transparent' }}>
-      <div className="app-bg" />
+    /* 窗口本身有系统圆角，卡片铺满即可 */
+    <div className="relative h-full w-full overflow-hidden">
+      <div className="frost frost-card relative flex h-full w-full flex-col overflow-hidden rounded-[12px]">
+        {/* 顶部高光，深色桌面上更立体 */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 opacity-70"
+          style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0))' }}
+        />
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-white/70 bg-white/78 backdrop-blur-2xl">
         {/* 头部：可拖动 */}
-        <header
-          className="flex flex-none items-center gap-2.5 px-3.5 pb-2 pt-2.5"
-          data-tauri-drag-region
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-        >
-          <div className="grid h-7 w-7 flex-none place-items-center rounded-[9px] bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white">
-            <Icon name="calendar" size={14} />
+        <header className="drag-handle relative z-[1] flex flex-none items-center gap-2.5 px-3.5 pb-2 pt-2.5">
+          <div className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white shadow-[0_5px_12px_-5px_rgba(10,132,255,0.95)]">
+            <Icon name="calendar" size={15} />
           </div>
-          <div className="min-w-0 flex-1" data-tauri-drag-region>
-            <div className="truncate text-[12.5px] font-bold leading-tight tracking-[-0.01em]">
-              今天 · {now.getMonth() + 1} 月 {now.getDate()} 日
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[13px] font-extrabold leading-tight tracking-[-0.01em]">DOGEEER</span>
+              <span className="truncate text-[11.5px] font-medium text-ink-3">
+                {now.getMonth() + 1} 月 {now.getDate()} 日 · {WEEKDAY_FULL[weekday]}
+              </span>
             </div>
-            <div className="truncate text-[10px] leading-tight text-ink-4">
-              {WEEKDAY_FULL[weekday]} · 第 {week} 教学周 · {rows.length} 节课
+            <div className="truncate text-[10.5px] leading-tight text-ink-4">
+              第 {week} 教学周 · 今天 {rows.length} 节课
+              {miniPinned ? ' · 已固定' : ''}
             </div>
           </div>
           <div className="tabular flex-none text-right">
-            <div className="text-[15px] font-bold leading-none tracking-[-0.02em]">
+            <div className="text-[16px] font-bold leading-none tracking-[-0.02em]">
               {pad2(now.getHours())}:{pad2(now.getMinutes())}
             </div>
           </div>
           <button
-            className="btn h-6 w-6 flex-none text-ink-4 hover:bg-slate-900/8 hover:text-ink-2"
+            className="no-drag btn h-7 w-7 flex-none text-ink-4 hover:bg-surface-2 hover:text-ink"
             onClick={() => void hideCurrentWindow()}
             title="隐藏浮窗"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            aria-label="隐藏浮窗"
           >
             <Icon name="close" size={12} />
           </button>
         </header>
 
         {/* 主体 */}
-        <div className="scroll-y flex min-h-0 flex-1 flex-col px-2.5 pb-1">
+        <div className="scroll-y relative z-[1] flex min-h-0 flex-1 flex-col px-2.5 pb-1">
           {rows.length === 0 && (
             <div className="grid flex-1 place-items-center py-10 text-center">
               <div>
-                <div className="mx-auto grid h-10 w-10 place-items-center rounded-2xl bg-slate-900/5 text-ink-4">
-                  <Icon name="sun" size={18} />
+                <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-surface-2 text-ink-4">
+                  <Icon name="sun" size={19} />
                 </div>
-                <div className="mt-2 text-[12px] font-semibold text-ink-3">今天没有课</div>
-                <div className="mt-0.5 text-[10.5px] text-ink-4">
+                <div className="mt-2 text-[12.5px] font-semibold text-ink-2">今天没有课</div>
+                <div className="mt-0.5 text-[11px] text-ink-4">
                   {openCount > 0 ? `还有 ${openCount} 项待办可以做` : '好好休息'}
                 </div>
               </div>
@@ -151,15 +241,15 @@ export default function MiniWidget() {
               const color = colorOf(r.course.color)
               const isCurrent = current?.course.id === r.course.id && current?.startPeriod === r.startPeriod
               const isPast = r.endMin < nowMin
-              const isOpen = expanded === `${r.course.id}-${r.startPeriod}`
               const key = `${r.course.id}-${r.startPeriod}`
+              const isOpen = expanded === key
               const undone = r.todos.filter((t) => !t.done)
               return (
                 <div
                   key={key}
                   className={clsx(
                     'overflow-hidden rounded-[14px] border transition-opacity',
-                    isPast && !isCurrent && 'opacity-45',
+                    isPast && !isCurrent && 'opacity-50',
                   )}
                   style={{
                     background: isCurrent
@@ -170,7 +260,7 @@ export default function MiniWidget() {
                   }}
                 >
                   <button
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+                    className="no-drag flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
                     data-testid={`mini-course-${r.course.id}-${r.startPeriod}`}
                     onClick={() => setExpanded(isOpen ? null : key)}
                   >
@@ -189,7 +279,7 @@ export default function MiniWidget() {
                           <span className="live-dot inline-block h-1.5 w-1.5 flex-none rounded-full bg-[#FF3B30]" />
                         )}
                         {!isCurrent && undone.length > 0 && (
-                          <span className="flex-none rounded-full bg-black/10 px-1.5 text-[9.5px] font-bold">
+                          <span className="flex-none rounded-full bg-surface-3 px-1.5 text-[9.5px] font-bold">
                             {undone.length} 项作业
                           </span>
                         )}
@@ -220,13 +310,12 @@ export default function MiniWidget() {
                         transition={springSoft}
                         className="overflow-hidden"
                       >
-                        <div className="px-2.5 pb-2">
+                        <div className="no-drag px-2.5 pb-2">
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] opacity-85">
-                            <span className="flex items-center gap-1">
+                            <span className="tabular flex items-center gap-1">
                               <Icon name="clock" size={10} />
                               {pad2(Math.floor(r.startMin / 60))}:{pad2(r.startMin % 60)}–
-                              {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)} · 第 {r.startPeriod}
-                              {r.endPeriod !== r.startPeriod ? `-${r.endPeriod}` : ''} 节
+                              {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)}
                             </span>
                             {r.room && (
                               <span className="flex items-center gap-1">
@@ -242,7 +331,7 @@ export default function MiniWidget() {
                             )}
                           </div>
 
-                          <div className="mt-1.5 rounded-[10px] bg-white/55 p-2" style={{ color: '#0b1220' }}>
+                          <div className="mt-1.5 rounded-[10px] bg-surface-1 p-2 text-ink">
                             <div className="mb-1 flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider text-ink-4">
                               <Icon name="flag" size={10} />
                               作业 / DDL
@@ -310,8 +399,8 @@ export default function MiniWidget() {
           </div>
 
           {/* 今日 DDL 汇总 */}
-          {(upcoming.overdue.length > 0 || upcoming.soon.length > 0) && (
-            <div className="mt-2.5 rounded-[14px] border border-line bg-slate-900/[0.025] p-2.5">
+          {hasDdlSection && (
+            <div className="mt-2.5 rounded-[14px] border border-line bg-surface-1 p-2.5">
               <div className="mb-1.5 flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider text-ink-4">
                 <Icon name="flag" size={10} />
                 近期待办
@@ -351,7 +440,7 @@ export default function MiniWidget() {
           )}
 
           {next && (
-            <div className="mt-2 px-1 text-[10px] text-ink-4">
+            <div className="mt-2 px-1 text-[10.5px] text-ink-4">
               下一节：{next.course.name} · {pad2(Math.floor(next.startMin / 60))}:{pad2(next.startMin % 60)}
               {next.room ? ` · ${next.room}` : ''}
             </div>
@@ -360,14 +449,11 @@ export default function MiniWidget() {
         </div>
 
         {/* 底部 */}
-        <footer
-          className="flex flex-none items-center gap-2 border-t border-line px-3 py-2"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          <span className="flex-1 text-[10px] text-ink-4">
+        <footer className="no-drag relative z-[1] flex flex-none items-center gap-2 border-t border-line px-3 py-2">
+          <span className="flex-1 text-[10.5px] text-ink-4">
             {openCount > 0 ? `${openCount} 项待办未完成` : '待办已清空 🎉'}
           </span>
-          <button className="btn btn-primary h-7 px-3 text-[11.5px]" onClick={() => void openApp()}>
+          <button className="btn btn-primary h-7 px-3 text-[11.5px]" onClick={() => void showMainWindow()}>
             <Icon name="calendar" size={12} />
             打开完整课表
           </button>
@@ -376,6 +462,3 @@ export default function MiniWidget() {
     </div>
   )
 }
-
-/* 让浮窗跟随系统主题的浅色背景呈现（Windows 下窗口本身透明） */
-export const MINI_READY = true

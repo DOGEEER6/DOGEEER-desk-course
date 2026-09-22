@@ -36,6 +36,9 @@ export const defaultSettings: AppSettings = {
   },
   showWeekend: false,
   tickSeconds: 30,
+  /** 浮窗默认「在桌面上即可」，不抢占最前 */
+  miniAlwaysOnTop: false,
+  theme: 'system',
 }
 
 interface AppState {
@@ -76,6 +79,12 @@ interface AppState {
   updateTodo: (id: string, patch: Partial<Todo>) => void
   toggleTodo: (id: string, done?: boolean) => void
   removeTodo: (id: string) => void
+  /** 归档一条待办（完成后进入归档） */
+  archiveTodo: (id: string) => void
+  /** 从归档恢复 */
+  restoreTodo: (id: string) => void
+  /** 清空归档 */
+  clearArchived: () => void
   clearCompleted: () => void
 
   setPeriods: (p: PeriodSlot[]) => void
@@ -281,6 +290,7 @@ export const useApp = create<AppState>()(
           createdAt: t.createdAt ?? new Date().toISOString(),
           completedAt: t.completedAt,
           notified: t.notified ?? false,
+          archived: t.archived ?? false,
         }
         set((s) => ({ todos: [todo, ...s.todos] }))
         return todo.id
@@ -298,9 +308,23 @@ export const useApp = create<AppState>()(
           }),
         })),
 
+      archiveTodo: (id) =>
+        set((s) => ({
+          todos: s.todos.map((t) =>
+            t.id === id ? { ...t, archived: true, done: true, completedAt: t.completedAt ?? new Date().toISOString() } : t,
+          ),
+        })),
+
+      restoreTodo: (id) =>
+        set((s) => ({
+          todos: s.todos.map((t) => (t.id === id ? { ...t, archived: false } : t)),
+        })),
+
+      clearArchived: () => set((s) => ({ todos: s.todos.filter((t) => !t.archived) })),
+
       removeTodo: (id) => set((s) => ({ todos: s.todos.filter((t) => t.id !== id) })),
 
-      clearCompleted: () => set((s) => ({ todos: s.todos.filter((t) => !t.done) })),
+      clearCompleted: () => set((s) => ({ todos: s.todos.filter((t) => !(t.done && t.archived)) })),
 
       setPeriods: (p) => set({ periods: [...p].sort((a, b) => a.index - b.index) }),
 

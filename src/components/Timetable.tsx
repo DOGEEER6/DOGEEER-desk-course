@@ -228,7 +228,7 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
                       onDoubleClick={() => onAddAt?.(d, p.index, p.index)}
                       className={clsx(
                         'w-full rounded-[14px] border border-dashed border-transparent transition-colors',
-                        todayIdx >= 0 && days[todayIdx] === d ? 'bg-[#0A84FF]/[0.045]' : 'bg-slate-900/[0.022]',
+                        todayIdx >= 0 && days[todayIdx] === d ? 'bg-[#0A84FF]/[0.045]' : 'bg-surface-1',
                         'hover:border-[#0A84FF]/35 hover:bg-[#0A84FF]/[0.07]',
                       )}
                       style={{ height: PERIOD_H - 6 }}
@@ -366,7 +366,7 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
 
         {cards.length === 0 && (
           <div className="grid place-items-center py-16 text-center">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-900/5 text-ink-4">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-surface-2 text-ink-4">
               <Icon name="calendar" size={22} />
             </div>
             <div className="mt-3 text-[14px] font-semibold text-ink-2">这一周还没有课程</div>
