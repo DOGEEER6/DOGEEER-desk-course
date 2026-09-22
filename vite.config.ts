@@ -10,6 +10,10 @@ export default defineConfig({
     port: 5183,
     strictPort: true,
     host: '127.0.0.1',
+    watch: {
+      // 编辑器/工具写入时的临时文件不要被监听，否则 Windows 上会 EBUSY 崩溃
+      ignored: ['**/.*.tmpdir/**', '**/*.tmp', '**/*.tmpdir/**', '**/node_modules/**', '**/src-tauri/**'],
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {

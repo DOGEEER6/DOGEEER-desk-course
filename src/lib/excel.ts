@@ -159,11 +159,12 @@ export function periodsFromTime(text: string, periods = DEFAULT_PERIODS): { star
 export function parseWeeks(text: string, totalWeeks = 24): number[] | null {
   const raw = normalizeText(text)
   if (!raw) return null
-  const odd = /单周/.test(raw)
-  const even = /双周/.test(raw)
+  const odd =
+    /(^|[^单])单周|\(单\)|（单）|\s单$|单个?周|奇数周/.test(raw) || /周\s*[（(]\s*单\s*[)）]/.test(raw)
+  const even = /双周|\(双\)|（双）|\s双$|偶数周/.test(raw)
   const body = raw
     .replace(/[第周星期()（）]/g, ' ')
-    .replace(/单双|单周|双周|每周|共/g, ' ')
+    .replace(/单双|单周|双周|每周|共|单|双/g, ' ')
     .trim()
   const set = new Set<number>()
   const segRe = /(\d+)\s*[-~至]\s*(\d+)|(\d+)/g
@@ -192,6 +193,16 @@ export function parseWeeks(text: string, totalWeeks = 24): number[] | null {
 /* 单元格文本 → 课程信息                                                */
 /* ------------------------------------------------------------------ */
 
+/** 这些值等价于「没填」 */
+const PLACEHOLDER = /^(无|没有|暂无|待定|未定|—+|-+|--+|N\/?A|null|空|网课|线上|慕课|MOOC)$/i
+
+function clean(v: string | undefined): string | undefined {
+  if (!v) return undefined
+  const t = normalizeText(v)
+  if (!t || PLACEHOLDER.test(t)) return undefined
+  return t
+}
+
 interface CellParsed {
   name: string
   teacher?: string
@@ -208,49 +219,58 @@ export function parseCourseCell(text: string, totalWeeks: number): CellParsed | 
     .filter(Boolean)
   if (!lines.length) return null
 
-  const name = lines[0]
+  const name = clean(lines[0])
   if (!name) return null
-  // “说明：…”“备注”之类直接跳过
+  // “说明：…”“备注”“网课”之类直接跳过
   if (/^(说明|备注|注意)[:：]/.test(name)) return null
+  if (/^(网课|线上|慕课|MOOC)/i.test(name)) return null
 
-  let weeks: number[] | null = null
+  let found: number[] | null = null
+  /** 文本里出现过任何「周」相关字样（含"每周"） */
+  let hasWeekInfo = false
   let note: string | undefined
   const extras: string[] = []
 
   for (const line of lines.slice(1)) {
+    const paren = /[（(]([^()（）]*)[)）]/.exec(line)
     const w = parseWeeks(line, totalWeeks)
-    const hasWeekHint = /周|单周|双周/.test(line) && w != null
-    // 取出括号里的周次，剩下的当作教师名
-    const paren = /[\(（]([^()（）]*)[\)）]/.exec(line)
-    if (paren && w) {
-      if (!weeks) weeks = w
-      if (/单周|双周/.test(paren[1])) note = /单周/.test(paren[1]) ? '单周' : '双周'
+    const weekWord = /周/.test(line)
+    if (weekWord) hasWeekInfo = true
+    if (paren && /周/.test(paren[1])) hasWeekInfo = true
+
+    if (w) {
+      if (!found) found = w
+      const marker = paren?.[1] ?? ''
+      if (/(^|[^单])单周|\(单\)|\s单$|单个?周|奇数周/.test(marker) || /(^|[^单])单周|\(单\)|\s单$/.test(line)) {
+        note = '单周'
+      } else if (/双周|\(双\)|\s双$|偶数周/.test(marker) || /双周|\(双\)|\s双$/.test(line)) {
+        note = '双周'
+      }
     }
+
     let rest = line
     if (paren) rest = line.replace(paren[0], '').trim()
-    // 去掉可能残留的 “1-16周”
-    rest = rest.replace(/\d+\s*[-~至]?\s*\d*\s*周/g, '').trim()
-    if (/单周|双周/.test(rest)) {
-      if (!note) note = rest.includes('单') ? '单周' : '双周'
-      rest = rest.replace(/单周|双周/g, '').trim()
-    }
-    if (rest && !hasWeekHint) extras.push(rest)
+    // 去掉可能残留的 “1-16周”“每周”
+    rest = rest.replace(/\d+\s*[-~至]?\s*\d*\s*周/g, '').replace(/每周|单周|双周/g, '').trim()
+    if (rest) extras.push(rest)
   }
+
+  // 单元格里只写了“每周”之类的说明 → 视为没有具体周次；完全没提周次 → 保持 null（由调用方决定）
+  const weeks: number[] | null = found ?? (hasWeekInfo ? [] : null)
 
   let teacher: string | undefined
   let room: string | undefined
 
   // 有多行附加信息时，最后一行通常是地点
   if (extras.length >= 2) {
-    teacher = extras[0]
-    room = extras[extras.length - 1]
+    teacher = clean(extras[0])
+    room = clean(extras[extras.length - 1])
   } else if (extras.length === 1) {
     const only = extras[0]
-    if (looksLikeRoom(only)) room = only
-    else teacher = only
+    if (looksLikeRoom(only)) room = clean(only)
+    else teacher = clean(only)
   }
 
-  // 名称里可能带周次，例如 “程序设计实践A(I)”
   return { name, teacher, room, weeks, note }
 }
 
@@ -314,15 +334,51 @@ export async function parseTimetableFile(
     issues.push({ sheet: sheetName, level: 'warn', message: '未识别为课表格式，已跳过' })
   }
 
-  // 合并重复记录（同课同时间同地点同周次）
+  // 合并重复记录（同课同时段同周次即视为同一条，地点/教师互补）
   const merged = new Map<string, ParsedRecord>()
   for (const r of records) {
-    const key = `${r.name}|${r.day}|${r.startPeriod}|${r.endPeriod}|${r.room ?? ''}|${r.weeks.join(',')}`
-    if (!merged.has(key)) merged.set(key, r)
+    const key = `${r.name}|${r.day}|${r.startPeriod}|${r.endPeriod}|${r.weeks.join(',')}`
+    const prev = merged.get(key)
+    if (!prev) {
+      merged.set(key, r)
+      continue
+    }
+    merged.set(key, {
+      ...prev,
+      room: prev.room ?? r.room,
+      teacher: prev.teacher ?? r.teacher,
+      note: prev.note ?? r.note,
+    })
+  }
+
+  // 同一门课在同一时段如果既出现「每周」又出现了明确周次（常见于同时导入
+  // 网格表和清单表：表格里带周次、清单里不带），以明确周次为准，丢弃「每周」。
+  const bySlot = new Map<string, ParsedRecord[]>()
+  for (const r of merged.values()) {
+    const slot = `${r.name}|${r.day}|${r.startPeriod}|${r.endPeriod}`
+    const arr = bySlot.get(slot) ?? []
+    arr.push(r)
+    bySlot.set(slot, arr)
+  }
+  const final: ParsedRecord[] = []
+  for (const arr of bySlot.values()) {
+    if (arr.length > 1 && arr.some((x) => x.weeks.length > 0)) {
+      const withWeeks = arr.filter((x) => x.weeks.length > 0)
+      final.push(...withWeeks)
+      // 用带周次的记录补全信息
+      for (const a of withWeeks) {
+        for (const b of arr) {
+          a.room = a.room ?? b.room
+          a.teacher = a.teacher ?? b.teacher
+        }
+      }
+    } else {
+      final.push(...arr)
+    }
   }
 
   return {
-    records: [...merged.values()].sort(
+    records: final.sort(
       (a, b) => a.day - b.day || a.startPeriod - b.startPeriod || a.name.localeCompare(b.name),
     ),
     issues,
@@ -387,6 +443,12 @@ function tryFlatSheet(
     let period = cols.period != null ? parsePeriods(cellText(row[cols.period])) : null
     if (!period && cols.time != null) period = periodsFromTime(cellText(row[cols.time]), DEFAULT_PERIODS)
 
+    const weeksCell = cols.weeks != null ? cellText(row[cols.weeks]) : ''
+    const weeks = parseWeeks(weeksCell, totalWeeks) ?? []
+    const room = clean(cols.room != null ? cellText(row[cols.room]) : undefined)
+    const teacher = clean(cols.teacher != null ? cellText(row[cols.teacher]) : undefined)
+    const note = /单周/.test(weeksCell) ? '单周' : /双周/.test(weeksCell) ? '双周' : undefined
+
     if (day == null || !period) {
       // 尝试从整行里兜底识别
       const joined = row.map(cellText).join(' ')
@@ -401,15 +463,15 @@ function tryFlatSheet(
         })
         continue
       }
-      period = p2
       out.push({
         name,
         day: d2,
         startPeriod: p2.start,
         endPeriod: p2.end,
-        weeks: (cols.weeks != null ? parseWeeks(cellText(row[cols.weeks]), totalWeeks) : null) ?? [],
-        room: cols.room != null ? cellText(row[cols.room]) || undefined : undefined,
-        teacher: cols.teacher != null ? cellText(row[cols.teacher]) || undefined : undefined,
+        weeks,
+        room,
+        teacher,
+        note,
       })
       continue
     }
@@ -419,9 +481,10 @@ function tryFlatSheet(
       day,
       startPeriod: period.start,
       endPeriod: period.end,
-      weeks: (cols.weeks != null ? parseWeeks(cellText(row[cols.weeks]), totalWeeks) : null) ?? [],
-      room: cols.room != null ? cellText(row[cols.room]) || undefined : undefined,
-      teacher: cols.teacher != null ? cellText(row[cols.teacher]) || undefined : undefined,
+      weeks,
+      room,
+      teacher,
+      note,
     })
   }
   return out
@@ -483,22 +546,8 @@ function tryGridSheet(
       break
     }
   }
-  // 退化：只有个别列（例如只有周六周日被截断的表）
-  if (headerRow < 0) {
-    for (let r = 0; r < Math.min(maxRow, 10); r++) {
-      const map = new Map<number, Weekday>()
-      for (let c = 0; c < maxCol; c++) {
-        const d = detectWeekday(decodeCell(ws, r, c))
-        if (d != null) map.set(c, d)
-      }
-      if (map.size >= 2) {
-        headerRow = r
-        dayOfCol = map
-        break
-      }
-    }
-  }
-  if (headerRow < 0 || dayOfCol.size === 0) return []
+  // 网格表必须至少有两列星期，否则会把「课程清单」的“星期”列误判成网格
+  if (headerRow < 0 || dayOfCol.size < 2) return []
 
   // 2) 逐行找节次
   const periodOfRow = new Map<number, { start: number; end: number }>()

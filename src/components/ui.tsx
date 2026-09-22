@@ -339,7 +339,7 @@ export function ToastHost() {
   const toasts = useToastStore((s) => s.toasts)
   const dismiss = useToastStore((s) => s.dismiss)
   return (
-    <div className="pointer-events-none fixed bottom-6 left-1/2 z-[90] flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2">
+    <div className="pointer-events-none fixed right-5 top-5 z-[90] flex w-[min(88vw,400px)] flex-col gap-2">
       <AnimatePresence initial={false}>
         {toasts.map((t) => {
           const tone = TONE_STYLE[t.tone]
@@ -347,9 +347,9 @@ export function ToastHost() {
             <motion.div
               key={t.id}
               layout
-              initial={{ opacity: 0, y: 24, scale: 0.94 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.96 }}
+              initial={{ opacity: 0, x: 32, scale: 0.94 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 20, scale: 0.96 }}
               transition={springSoft}
               className="glass pointer-events-auto flex items-start gap-3 rounded-2xl px-4 py-3"
               style={{ boxShadow: 'var(--shadow-float)' }}
