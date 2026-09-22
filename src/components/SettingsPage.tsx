@@ -15,7 +15,7 @@ import {
   setMiniAlwaysOnTop,
   showMiniWindow,
 } from '../lib/desktop'
-import { setTheme, type ThemeMode } from '../lib/theme'
+import { setTheme, syncMiniTheme, type ThemeMode } from '../lib/theme'
 
 export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const settings = useApp((s) => s.settings)
@@ -230,6 +230,22 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
                 <span className="block text-[12.5px] font-semibold">固定在桌面最前</span>
                 <span className="text-[11px] text-ink-3">
                   关闭时浮窗就在桌面上，可被其他窗口盖住（默认）
+                </span>
+              </span>
+            </label>
+
+            <label className="flex items-center gap-3">
+              <Switch
+                checked={!!settings.miniFollowTheme}
+                onChange={(v) => {
+                  updateSettings({ miniFollowTheme: v })
+                  if (v) syncMiniTheme(settings.theme ?? 'dark')
+                }}
+              />
+              <span>
+                <span className="block text-[12.5px] font-semibold">浮窗跟随主界面主题</span>
+                <span className="text-[11px] text-ink-3">
+                  关闭时浮窗固定深色（默认），深色玻璃在深色桌面上更好看
                 </span>
               </span>
             </label>

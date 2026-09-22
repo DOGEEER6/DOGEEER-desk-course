@@ -38,6 +38,8 @@ export const defaultSettings: AppSettings = {
   tickSeconds: 30,
   /** 浮窗默认「在桌面上即可」，不抢占最前 */
   miniAlwaysOnTop: false,
+  /** 浮窗默认固定深色，不跟随主界面 */
+  miniFollowTheme: false,
   /** 默认深色 */
   theme: 'dark',
 }

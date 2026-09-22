@@ -4,6 +4,28 @@
 use tauri::{Manager, WebviewWindow};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
+/// 把 panic 写进日志，避免 release 版「闪一下就没了」却查不到原因
+fn install_panic_logger() {
+    let dir = std::env::temp_dir().join("DOGEEER课表");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("crash.log");
+    std::panic::set_hook(Box::new(move |info| {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = writeln!(f, "[{}] {}", chrono_like_now(), info);
+        }
+    }));
+}
+
+/// 极简时间戳，避免额外依赖
+fn chrono_like_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => format!("unix={}", d.as_secs()),
+        Err(_) => "unix=?".to_string(),
+    }
+}
+
 /// 应用版本
 #[tauri::command]
 fn app_version() -> String {
@@ -87,7 +109,25 @@ fn get_autostart(app: tauri::AppHandle) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    install_panic_logger();
     tauri::Builder::default()
+        // 单实例必须第一个注册：否则重复双击会开出第二个「看不见」的实例
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let minimized = argv.iter().any(|a| a == "--minimized" || a == "--autostart");
+            if let Some(mini) = app.get_webview_window("mini") {
+                let _ = mini.show();
+            }
+            if !minimized {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.unminimize();
+                    let _ = main.set_focus();
+                }
+                if let Some(mini) = app.get_webview_window("mini") {
+                    let _ = mini.set_always_on_top(false);
+                }
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())

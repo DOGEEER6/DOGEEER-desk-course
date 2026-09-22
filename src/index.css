@@ -1,18 +1,18 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 
 /* ================================================================== */
-/* 设计令牌                                                            */
+/* 璁捐浠ょ墝                                                            */
 /*                                                                     */
-/* 全部颜色走 CSS 变量：亮色由 html:not([data-theme]) 定义，           */
-/* 暗色由 [data-theme='dark'] 覆盖。窗口里通过 matchMedia 跟随系统。   */
-/* 这样 Tailwind 类（bg-ink / text-ink-3 / border-line …）自动适配。   */
+/* 鍏ㄩ儴棰滆壊璧?CSS 鍙橀噺锛氫寒鑹茬敱 html:not([data-theme]) 瀹氫箟锛?          */
+/* 鏆楄壊鐢?[data-theme='dark'] 瑕嗙洊銆傜獥鍙ｉ噷閫氳繃 matchMedia 璺熼殢绯荤粺銆?  */
+/* 杩欐牱 Tailwind 绫伙紙bg-ink / text-ink-3 / border-line 鈥︼級鑷姩閫傞厤銆?  */
 /* ================================================================== */
 
 @theme {
   --font-sans: 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Segoe UI',
     system-ui, sans-serif;
 
-  /* 语义色：指向运行时可切换的变量 */
+  /* 璇箟鑹诧細鎸囧悜杩愯鏃跺彲鍒囨崲鐨勫彉閲?*/
   --color-ink: var(--c-ink);
   --color-ink-2: var(--c-ink-2);
   --color-ink-3: var(--c-ink-3);
@@ -22,12 +22,12 @@
   --color-accent: #0a84ff;
   --color-accent-soft: #e8f2ff;
 
-  /* 表面填充（替代原来散落的 bg-slate-900/[0.05] 之类） */
+  /* 琛ㄩ潰濉厖锛堟浛浠ｅ師鏉ユ暎钀界殑 bg-slate-900/[0.05] 涔嬬被锛?*/
   --color-surface-1: var(--c-surface-1);
   --color-surface-2: var(--c-surface-2);
   --color-surface-3: var(--c-surface-3);
 
-  /* 玻璃表面（用于面板 / 弹窗背景） */
+  /* 鐜荤拑琛ㄩ潰锛堢敤浜庨潰鏉?/ 寮圭獥鑳屾櫙锛?*/
   --color-glass: var(--c-glass-panel);
   --color-glass-thin: var(--c-glass-panel-thin);
   --color-glass-line: var(--c-glass-border);
@@ -53,7 +53,7 @@
   --c-surface-2: rgba(15, 23, 42, 0.07);
   --c-surface-3: rgba(15, 23, 42, 0.11);
 
-  /* 玻璃 */
+  /* 鐜荤拑 */
   --c-glass: rgba(255, 255, 255, 0.82);
   --c-glass-thin: rgba(255, 255, 255, 0.66);
   --c-glass-panel: rgba(255, 255, 255, 0.94);
@@ -138,7 +138,7 @@
   --sh-card-hover: 0 10px 26px -14px rgba(0, 0, 0, 0.8);
 }
 
-/* 浮窗使用更强的通透感 */
+/* 娴獥浣跨敤鏇村己鐨勯€氶€忔劅 */
 .frost {
   --glass-blur: 40px;
   --glass-sat: 210%;
@@ -149,7 +149,7 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* 基础：窗口透明，只有内部容器画圆角底色                                */
+/* 鍩虹锛氱獥鍙ｉ€忔槑锛屽彧鏈夊唴閮ㄥ鍣ㄧ敾鍦嗚搴曡壊                                */
 /* ------------------------------------------------------------------ */
 
 * {
@@ -161,8 +161,7 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  /* 关键：Tauri 透明窗口里必须让 html/body 完全透明，
-     否则圆角外面会露出白/黑色方角 */
+  /* 鍏抽敭锛歍auri 閫忔槑绐楀彛閲屽繀椤昏 html/body 瀹屽叏閫忔槑锛?     鍚﹀垯鍦嗚澶栭潰浼氶湶鍑虹櫧/榛戣壊鏂硅 */
   background: transparent !important;
 }
 
@@ -182,7 +181,7 @@ textarea {
   user-select: text;
 }
 
-/* 应用底：柔和光斑 */
+/* 搴旂敤搴曪細鏌斿拰鍏夋枒 */
 .app-bg {
   position: fixed;
   inset: 0;
@@ -193,7 +192,7 @@ textarea {
     linear-gradient(180deg, var(--c-bg-top) 0%, var(--c-bg-bottom) 100%);
 }
 
-/* 浮窗专用底：几乎全透明，让桌面透上来，毛玻璃才有意义 */
+/* 娴獥涓撶敤搴曪細鍑犱箮鍏ㄩ€忔槑锛岃妗岄潰閫忎笂鏉ワ紝姣涚幓鐠冩墠鏈夋剰涔?*/
 .app-bg-mini {
   position: absolute;
   inset: 0;
@@ -205,7 +204,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* 窗口外壳 / 自定义标题栏                                              */
+/* 绐楀彛澶栧３ / 鑷畾涔夋爣棰樻爮                                              */
 /* ------------------------------------------------------------------ */
 
 .window-shell {
@@ -255,7 +254,7 @@ textarea {
   color: #fff;
 }
 
-/* 浮窗的拖拽把手 */
+/* 娴獥鐨勬嫋鎷芥妸鎵?*/
 .drag-handle {
   -webkit-app-region: drag;
 }
@@ -264,13 +263,12 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* 材质                                                                */
+/* 鏉愯川                                                                */
 /* ------------------------------------------------------------------ */
 
 .glass {
   background: var(--c-glass);
   backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
-  -webkit-backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
   border: 1px solid var(--c-glass-border);
   box-shadow: var(--sh-soft);
 }
@@ -278,15 +276,13 @@ textarea {
 .glass-thin {
   background: var(--c-glass-thin);
   backdrop-filter: saturate(calc(var(--glass-sat) - 20%)) blur(calc(var(--glass-blur) * 0.55));
-  -webkit-backdrop-filter: saturate(calc(var(--glass-sat) - 20%)) blur(calc(var(--glass-blur) * 0.55));
   border: 1px solid var(--c-glass-border-thin);
 }
 
-/* 浮窗主卡片：透出窗口本身的 Mica/亚克力材质，只有一层很淡的暗色膜 + 顶部高光 */
+/* 娴獥涓诲崱鐗囷細閫忓嚭绐楀彛鏈韩鐨?Mica/浜氬厠鍔涙潗璐紝鍙湁涓€灞傚緢娣＄殑鏆楄壊鑶?+ 椤堕儴楂樺厜 */
 .frost-card {
   background: var(--c-glass);
   backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
-  -webkit-backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 [data-theme='light'] .frost-card {
@@ -298,7 +294,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* 滚动条                                                              */
+/* 婊氬姩鏉?                                                             */
 /* ------------------------------------------------------------------ */
 
 .scroll-y {
@@ -329,7 +325,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* 控件                                                                */
+/* 鎺т欢                                                                */
 /* ------------------------------------------------------------------ */
 
 .btn {
@@ -397,7 +393,7 @@ select.field option {
   color: var(--color-ink);
 }
 
-/* iOS 分段控件 */
+/* iOS 鍒嗘鎺т欢 */
 .segmented {
   position: relative;
   display: inline-flex;
@@ -430,7 +426,7 @@ select.field option {
   box-shadow: var(--c-seg-thumb-shadow);
 }
 
-/* iOS 开关 */
+/* iOS 寮€鍏?*/
 .switch {
   position: relative;
   width: 47px;
@@ -458,7 +454,7 @@ select.field option {
   transform: translateX(18px);
 }
 
-/* 复选框 */
+/* 澶嶉€夋 */
 .checkbox {
   width: 22px;
   height: 22px;
@@ -485,7 +481,7 @@ select.field option {
 }
 
 /* ------------------------------------------------------------------ */
-/* 课表网格                                                            */
+/* 璇捐〃缃戞牸                                                            */
 /* ------------------------------------------------------------------ */
 
 .tt-card {
@@ -512,7 +508,7 @@ select.field option {
 .tt-card[data-dragging='true'] {
   box-shadow: var(--sh-float);
   z-index: 40;
-  /* 注意：拖动位移由内联 transform 控制，这里不要再写 transform 以免覆盖 */
+  /* 娉ㄦ剰锛氭嫋鍔ㄤ綅绉荤敱鍐呰仈 transform 鎺у埗锛岃繖閲屼笉瑕佸啀鍐?transform 浠ュ厤瑕嗙洊 */
   filter: brightness(1.03);
   transition: none;
 }
@@ -561,7 +557,7 @@ select.field option {
   bottom: 0;
 }
 
-/* 吸附辅助线 */
+/* 鍚搁檮杈呭姪绾?*/
 .snap-guide {
   position: absolute;
   z-index: 30;
@@ -571,7 +567,7 @@ select.field option {
   box-shadow: inset 0 0 0 1.5px rgba(10, 132, 255, 0.6);
 }
 
-/* 月视图 / 学期视图 */
+/* 鏈堣鍥?/ 瀛︽湡瑙嗗浘 */
 .month-cell {
   border-radius: 12px;
   background: var(--c-surface-1);
@@ -588,7 +584,7 @@ select.field option {
 }
 
 /* ------------------------------------------------------------------ */
-/* 动画                                                                */
+/* 鍔ㄧ敾                                                                */
 /* ------------------------------------------------------------------ */
 
 @keyframes rise {
@@ -655,7 +651,7 @@ select.field option {
   animation: pulse-ring 2s ease-out infinite;
 }
 
-/* 拖拽时全局光标 */
+/* 鎷栨嫿鏃跺叏灞€鍏夋爣 */
 body[data-dragging='true'] {
   cursor: grabbing;
 }
@@ -671,7 +667,7 @@ body[data-resizing='true'] {
   display: none;
 }
 
-/* 尊重系统的「减少动态效果」 */
+/* 灏婇噸绯荤粺鐨勩€屽噺灏戝姩鎬佹晥鏋溿€?*/
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -681,3 +677,4 @@ body[data-resizing='true'] {
     transition-duration: 0.01ms !important;
   }
 }
+

@@ -267,7 +267,12 @@ console.log(`页面就绪: ${ready}`)
 await new Promise((r) => setTimeout(r, 1200))
 
 const json = JSON.stringify(payload)
-await evaluate(`localStorage.setItem('lumen-course-v1', ${JSON.stringify(json)}); return 'ok'`)
+await evaluate(`
+  // 重置浮窗主题到默认（深色），避免上一次测试遗留影响断言
+  localStorage.setItem('lumen-mini-theme', 'dark');
+  localStorage.setItem('lumen-course-v1', ${JSON.stringify(json)});
+  return 'ok';
+`)
 await send('Page.reload', { ignoreCache: false })
 await waitReady()
 await new Promise((r) => setTimeout(r, 2200))
@@ -535,7 +540,107 @@ check('浅色主题生效', (await evaluate(`return document.documentElement.dat
 await shot('14-light')
 await setTheme('system')
 
-// 自定义标题栏（桌面端）
+// ---- 浮窗（mini 窗口）验收 ----
+const miniTarget = targets.find((t) => t.type === 'page' && t.url.includes('mini'))
+if (miniTarget) {
+  const mws = new WebSocket(miniTarget.webSocketDebuggerUrl)
+  await new Promise((res, rej) => {
+    mws.onopen = res
+    mws.onerror = rej
+  })
+  let mid = 0
+  const mpend = new Map()
+  mws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data)
+    if (m.id && mpend.has(m.id)) {
+      mpend.get(m.id)(m)
+      mpend.delete(m.id)
+    }
+  }
+  const msend = (method, params = {}) =>
+    new Promise((res) => {
+      const i = ++mid
+      mpend.set(i, res)
+      mws.send(JSON.stringify({ id: i, method, params }))
+    })
+  const mev = async (expr) => {
+    const r = await msend('Runtime.evaluate', {
+      expression: `(async () => { ${expr} })()`,
+      awaitPromise: true,
+      returnByValue: true,
+    })
+    if (r.result?.exceptionDetails) return 'EXC: ' + (r.result.exceptionDetails.exception?.description || '').slice(0, 160)
+    return r.result?.result?.value
+  }
+  const mshot = async (name) => {
+    const r = await msend('Page.captureScreenshot', { format: 'png' })
+    writeFileSync(join(shotDir, `${name}.png`), Buffer.from(r.result.data, 'base64'))
+    console.log(`  截图 ${join(shotDir, `${name}.png`)}`)
+  }
+  await msend('Runtime.enable')
+  await msend('Page.enable')
+  // 重新加载浮窗，让它在「默认深色」的初始状态下渲染（真实启动时就是这个状态）
+  await msend('Page.reload', { ignoreCache: false })
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const dark = await mev(`return document.documentElement.dataset.theme`)
+  check('浮窗默认深色', dark === 'dark', String(dark))
+
+  const glass = await mev(`
+    const el = document.querySelector('.frost-card');
+    if (!el) return null;
+    const s = getComputedStyle(el);
+    return JSON.stringify({ bg: s.backgroundColor, border: s.borderTopWidth, blur: s.backdropFilter, radius: s.borderRadius });
+  `)
+  const g = glass ? JSON.parse(glass) : null
+  check('浮窗没有额外描边', g && parseFloat(g.border) === 0, glass ?? 'no-card')
+  check('浮窗是半透明玻璃', g && /rgba\([^)]*0\.\d+\)/.test(g.bg), g?.bg ?? '')
+  check('浮窗应用了毛玻璃', g && /blur/.test(g.blur), g?.blur ?? '')
+
+  // 课程卡片不应被变暗
+  const dim = await mev(`
+    const cards = Array.from(document.querySelectorAll('[data-testid^="mini-course-"]'));
+    if (!cards.length) return 'no-course';
+    const opacities = cards.map(c => getComputedStyle(c.closest('div.overflow-hidden')).opacity);
+    return JSON.stringify(opacities);
+  `)
+  check('浮窗课程卡片未被变暗', dim !== 'no-course' && !/0\.[0-7]/.test(String(dim)), String(dim))
+
+  // 课程完成勾选
+  const classBefore = await mev(`return !!document.querySelector('[data-testid^="mini-done-"] svg path')`)
+  const classToggle = await mev(`
+    const b = document.querySelector('[data-testid^="mini-done-"]');
+    if (!b) return 'none';
+    b.click();
+    return 'ok';
+  `)
+  check('浮窗可勾选课程完成', classToggle === 'ok', String(classToggle))
+
+  // 待办完成勾选（全局列表）
+  const todoSel = await mev(`return document.querySelectorAll('[data-testid^="mini-todo-global-"]').length`)
+  if (todoSel > 0) {
+    const countOpen = `
+      const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+      return s.state.todos.filter(t => !t.done && !t.archived).length;
+    `
+    const todoBefore = await mev(countOpen)
+    await mev(`document.querySelector('[data-testid^="mini-todo-global-"]').click(); return 'ok'`)
+    await new Promise((r) => setTimeout(r, 2000))
+    const todoAfter = await mev(countOpen)
+    check('浮窗勾选待办后减少未完成数', todoAfter < todoBefore, `${todoBefore} -> ${todoAfter}`)
+    check(
+      '浮窗勾选的待办已归档',
+      await mev(`
+        const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+        return s.state.todos.some(t => t.archived);
+      `),
+    )
+  } else {
+    check('浮窗有可勾选的待办', false, '未找到待办勾选框')
+  }
+  await mshot('20-mini')
+  mws.close()
+}
 if (TARGET_HINT.includes('tauri')) {
   check('自绘标题栏存在', await evaluate(`return !!document.querySelector('.titlebar')`))
   check('窗口外壳有圆角', (await evaluate(`return getComputedStyle(document.querySelector('.window-shell')).borderRadius`)) !== '0px')

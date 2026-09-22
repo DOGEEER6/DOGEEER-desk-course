@@ -17,6 +17,7 @@ import { dueLabel, pad2, sessionCoversWeek, weekIndexOf } from '../lib/time'
 import { Icon, springSnappy, springSoft } from '../components/ui'
 import { useNow } from '../hooks'
 import { hideCurrentWindow, isDesktop, setMiniAlwaysOnTop, showMainWindow } from '../lib/desktop'
+import { playChime } from '../lib/notify'
 
 /* ---------------- 窗口位置/大小持久化 ---------------- */
 
@@ -67,6 +68,7 @@ function saveGeom(g: MiniGeom) {
 
 interface Row {
   course: Course
+  sessionId: string
   startPeriod: number
   endPeriod: number
   startMin: number
@@ -83,8 +85,41 @@ export default function MiniWidget() {
   const periods = useApp((s) => s.periods)
   const settings = useApp((s) => s.settings)
   const miniPinned = useApp((s) => s.settings.miniAlwaysOnTop)
+  const toggleTodo = useApp((s) => s.toggleTodo)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [doneClasses, setDoneClasses] = useState<Set<string>>(new Set())
+  const [justDone, setJustDone] = useState<Set<string>>(new Set())
   const restored = useRef(false)
+
+  /** 勾掉一节课（表示已上完） */
+  const toggleClassDone = (courseId: string, sessionId: string) => {
+    const key = `${courseId}-${sessionId}`
+    setDoneClasses((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  /** 勾掉一条作业：先显示打勾，再收进归档（与主界面一致） */
+  const checkTodo = (id: string, done: boolean) => {
+    if (done) {
+      toggleTodo(id, false)
+      return
+    }
+    toggleTodo(id, true)
+    playChime('done')
+    setJustDone((s) => new Set(s).add(id))
+    window.setTimeout(() => {
+      useApp.getState().archiveTodo(id)
+      setJustDone((s) => {
+        const n = new Set(s)
+        n.delete(id)
+        return n
+      })
+    }, 900)
+  }
 
   const week = weekIndexOf(settings.semester.startDate, now)
   const weekday = (now.getDay() === 0 ? 7 : now.getDay()) as Weekday
@@ -147,6 +182,7 @@ export default function MiniWidget() {
         }
         out.push({
           course: c,
+          sessionId: s.id,
           startPeriod: s.startPeriod,
           endPeriod: s.endPeriod,
           startMin: toMin(a?.start),
@@ -236,70 +272,101 @@ export default function MiniWidget() {
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {rows.map((r) => {
               const color = colorOf(r.course.color)
               const isCurrent = current?.course.id === r.course.id && current?.startPeriod === r.startPeriod
-              const isPast = r.endMin < nowMin
               const key = `${r.course.id}-${r.startPeriod}`
               const isOpen = expanded === key
+              const classDone = doneClasses.has(`${r.course.id}-${r.sessionId}`)
               const undone = r.todos.filter((t) => !t.done)
               return (
                 <div
                   key={key}
-                  className={clsx(
-                    'overflow-hidden rounded-[16px] border transition-opacity',
-                    isPast && !isCurrent && 'opacity-50',
-                  )}
+                  className="overflow-hidden rounded-[16px] border"
                   style={{
                     background: isCurrent
-                      ? `linear-gradient(150deg, ${color.solid}, ${color.to})`
+                      ? `linear-gradient(150deg, ${color.solid}, ${color.solid})`
                       : `linear-gradient(150deg, ${color.from}, ${color.to})`,
                     borderColor: isCurrent ? 'transparent' : color.ring,
                     color: isCurrent ? '#fff' : color.text,
                   }}
                 >
-                  <button
-                    className="no-drag flex w-full items-center gap-3 px-3 py-2.5 text-left"
-                    data-testid={`mini-course-${r.course.id}-${r.startPeriod}`}
-                    onClick={() => setExpanded(isOpen ? null : key)}
-                  >
-                    <div className="tabular w-[42px] flex-none">
-                      <div className="text-[12px] font-bold leading-tight">
-                        {pad2(Math.floor(r.startMin / 60))}:{pad2(r.startMin % 60)}
-                      </div>
-                      <div className="mt-0.5 text-[10px] leading-tight opacity-70">
-                        {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)}
-                      </div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-[13.5px] font-bold leading-tight">{r.course.name}</span>
-                        {isCurrent && (
-                          <span className="live-dot inline-block h-2 w-2 flex-none rounded-full bg-[#FF3B30]" />
-                        )}
-                        {!isCurrent && undone.length > 0 && (
-                          <span className="flex-none rounded-full bg-surface-3 px-2 py-[1px] text-[10px] font-bold">
-                            {undone.length} 项作业
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2.5 text-[10.5px] opacity-75">
-                        {r.room && <span className="truncate">{r.room}</span>}
-                        <span className="tabular flex-none">
-                          第 {r.startPeriod}
-                          {r.endPeriod !== r.startPeriod ? `-${r.endPeriod}` : ''} 节
-                        </span>
-                      </div>
-                    </div>
-                    <motion.span
-                      animate={{ rotate: isOpen ? 180 : 0 }}
-                      transition={springSnappy}
-                      className="flex-none opacity-60"
+                  <div className="flex items-center">
+                    {/* 完成勾选（表示这节课已上完） */}
+                    <button
+                      className="no-drag ml-3 grid h-[22px] w-[22px] flex-none place-items-center rounded-full border-2 transition-all active:scale-90"
+                      style={{
+                        borderColor: classDone ? 'transparent' : isCurrent ? 'rgba(255,255,255,0.85)' : color.ring,
+                        background: classDone ? '#34C759' : isCurrent ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.55)',
+                      }}
+                      data-testid={`mini-done-${r.course.id}-${r.startPeriod}`}
+                      onClick={() => toggleClassDone(r.course.id, r.sessionId)}
+                      title={classDone ? '取消「已上完」标记' : '标记这节课已上完'}
+                      aria-label={classDone ? '取消已完成' : '标记已完成'}
                     >
-                      <Icon name="chevronDown" size={14} />
-                    </motion.span>
-                  </button>
+                      <motion.svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        initial={false}
+                        animate={{ scale: classDone ? 1 : 0.3, opacity: classDone ? 1 : 0 }}
+                        transition={springSnappy}
+                      >
+                        <path d="M2 6.4l2.6 2.6L10 3.4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </motion.svg>
+                    </button>
+
+                    <button
+                      className="no-drag flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left"
+                      data-testid={`mini-course-${r.course.id}-${r.startPeriod}`}
+                      onClick={() => setExpanded(isOpen ? null : key)}
+                    >
+                      <div className="tabular w-[46px] flex-none">
+                        <div className="text-[13px] font-bold leading-tight">
+                          {pad2(Math.floor(r.startMin / 60))}:{pad2(r.startMin % 60)}
+                        </div>
+                        <div className="mt-0.5 text-[11px] leading-tight opacity-70">
+                          {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={clsx(
+                              'truncate text-[14.5px] font-bold leading-tight',
+                              classDone && 'line-through opacity-60',
+                            )}
+                          >
+                            {r.course.name}
+                          </span>
+                          {isCurrent && (
+                            <span className="live-dot inline-block h-2 w-2 flex-none rounded-full bg-[#FF3B30]" />
+                          )}
+                          {!isCurrent && undone.length > 0 && (
+                            <span className="flex-none rounded-full bg-surface-3 px-2 py-[1px] text-[11px] font-bold">
+                              {undone.length} 项作业
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2.5 text-[11.5px] opacity-75">
+                          {r.room && <span className="truncate">{r.room}</span>}
+                          <span className="tabular flex-none">
+                            第 {r.startPeriod}
+                            {r.endPeriod !== r.startPeriod ? `-${r.endPeriod}` : ''} 节
+                          </span>
+                        </div>
+                      </div>
+                      <motion.span
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={springSnappy}
+                        className="flex-none opacity-60"
+                      >
+                        <Icon name="chevronDown" size={15} />
+                      </motion.span>
+                    </button>
+                  </div>
 
                   <AnimatePresence initial={false}>
                     {isOpen && (
@@ -311,55 +378,73 @@ export default function MiniWidget() {
                         className="overflow-hidden"
                       >
                         <div className="no-drag px-3 pb-3">
-                          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[11px] opacity-85">
+                          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[12px] opacity-85">
                             <span className="tabular flex items-center gap-1">
-                              <Icon name="clock" size={11} />
+                              <Icon name="clock" size={12} />
                               {pad2(Math.floor(r.startMin / 60))}:{pad2(r.startMin % 60)}–
                               {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)}
                             </span>
                             {r.room && (
                               <span className="flex items-center gap-1">
-                                <Icon name="pin" size={11} />
+                                <Icon name="pin" size={12} />
                                 {r.room}
                               </span>
                             )}
                             {r.teacher && (
                               <span className="flex items-center gap-1">
-                                <Icon name="user" size={11} />
+                                <Icon name="user" size={12} />
                                 {r.teacher}
                               </span>
                             )}
                           </div>
 
-                          <div className="mt-2.5 rounded-[12px] bg-surface-1 p-2.5 text-ink">
-                            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-4">
-                              <Icon name="flag" size={11} />
+                          <div className="mt-2.5 rounded-[12px] bg-surface-1 p-3 text-ink">
+                            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-4">
+                              <Icon name="flag" size={12} />
                               作业 / DDL
                             </div>
                             {r.todos.length === 0 ? (
-                              <div className="text-[11px] text-ink-4">这门课还没有作业</div>
+                              <div className="text-[12px] text-ink-4">这门课还没有作业</div>
                             ) : (
-                              <ul className="space-y-1.5">
+                              <ul className="space-y-2">
                                 {r.todos.slice(0, 5).map((t) => {
                                   const d = dueLabel(t.dueAt, now)
+                                  const pending = justDone.has(t.id)
                                   return (
-                                    <li key={t.id} className="flex items-start gap-2">
-                                      <span
+                                    <li key={t.id} className="flex items-start gap-2.5">
+                                      <button
                                         className={clsx(
-                                          'mt-[5px] h-1.5 w-1.5 flex-none rounded-full',
-                                          t.done
-                                            ? 'bg-[#34C759]'
-                                            : d.tone === 'over'
-                                              ? 'bg-[#FF3B30]'
-                                              : d.tone === 'today'
-                                                ? 'bg-[#FF9F0A]'
-                                                : 'bg-[#0A84FF]',
+                                          'mt-[1px] grid h-[18px] w-[18px] flex-none place-items-center rounded-full border-[1.5px] transition-all active:scale-90',
+                                          t.done ? 'border-transparent bg-[#34C759]' : 'border-ink-4/60 hover:border-[#0A84FF]',
+                                          pending && 'ring-2 ring-[#34C759]/40',
                                         )}
-                                      />
+                                        data-testid={`mini-todo-${t.id}`}
+                                        onClick={() => checkTodo(t.id, t.done)}
+                                        title={t.done ? '取消完成' : '标记完成'}
+                                        aria-label={t.done ? '取消完成' : '标记完成'}
+                                      >
+                                        <motion.svg
+                                          width="10"
+                                          height="10"
+                                          viewBox="0 0 12 12"
+                                          fill="none"
+                                          initial={false}
+                                          animate={{ scale: t.done ? 1 : 0.3, opacity: t.done ? 1 : 0 }}
+                                          transition={springSnappy}
+                                        >
+                                          <path
+                                            d="M2 6.4l2.6 2.6L10 3.4"
+                                            stroke="#fff"
+                                            strokeWidth="2.2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          />
+                                        </motion.svg>
+                                      </button>
                                       <span className="min-w-0 flex-1">
                                         <span
                                           className={clsx(
-                                            'block text-[11.5px] font-medium leading-tight',
+                                            'block text-[12.5px] font-medium leading-snug',
                                             t.done && 'text-ink-4 line-through',
                                           )}
                                         >
@@ -368,7 +453,7 @@ export default function MiniWidget() {
                                         {!t.done && (
                                           <span
                                             className={clsx(
-                                              'mt-0.5 block text-[10px] leading-tight',
+                                              'mt-0.5 block text-[11px] leading-tight',
                                               d.tone === 'over'
                                                 ? 'text-[#D62A20]'
                                                 : d.tone === 'today'
@@ -384,7 +469,7 @@ export default function MiniWidget() {
                                   )
                                 })}
                                 {r.todos.length > 5 && (
-                                  <li className="text-[10px] text-ink-4">…还有 {r.todos.length - 5} 项</li>
+                                  <li className="text-[11px] text-ink-4">…还有 {r.todos.length - 5} 项</li>
                                 )}
                               </ul>
                             )}
@@ -405,28 +490,65 @@ export default function MiniWidget() {
                 <Icon name="flag" size={11} />
                 近期待办
               </div>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {upcoming.overdue.map((t) => (
-                  <li key={t.id} className="flex items-center gap-2 text-[11.5px]">
-                    <span className="h-1.5 w-1.5 flex-none rounded-full bg-[#FF3B30]" />
+                  <li key={t.id} className="flex items-center gap-2.5 text-[12.5px]">
+                    <button
+                      className={clsx(
+                        'grid h-[18px] w-[18px] flex-none place-items-center rounded-full border-[1.5px] transition-all active:scale-90',
+                        t.done ? 'border-transparent bg-[#34C759]' : 'border-ink-4/60 hover:border-[#0A84FF]',
+                        justDone.has(t.id) && 'ring-2 ring-[#34C759]/40',
+                      )}
+                      data-testid={`mini-todo-global-${t.id}`}
+                      onClick={() => checkTodo(t.id, t.done)}
+                      aria-label={t.done ? '取消完成' : '标记完成'}
+                    >
+                      <motion.svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        initial={false}
+                        animate={{ scale: t.done ? 1 : 0.3, opacity: t.done ? 1 : 0 }}
+                        transition={springSnappy}
+                      >
+                        <path d="M2 6.4l2.6 2.6L10 3.4" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </motion.svg>
+                    </button>
                     <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
-                    <span className="flex-none text-[10px] font-semibold text-[#D62A20]">已逾期</span>
+                    <span className="flex-none text-[11px] font-semibold text-[#D62A20]">已逾期</span>
                   </li>
                 ))}
                 {upcoming.soon.map((t) => {
                   const d = dueLabel(t.dueAt, now)
                   return (
-                    <li key={t.id} className="flex items-center gap-2 text-[11.5px]">
-                      <span
+                    <li key={t.id} className="flex items-center gap-2.5 text-[12.5px]">
+                      <button
                         className={clsx(
-                          'h-1.5 w-1.5 flex-none rounded-full',
-                          d.tone === 'today' ? 'bg-[#FF9F0A]' : 'bg-[#0A84FF]',
+                          'grid h-[18px] w-[18px] flex-none place-items-center rounded-full border-[1.5px] transition-all active:scale-90',
+                          t.done ? 'border-transparent bg-[#34C759]' : 'border-ink-4/60 hover:border-[#0A84FF]',
+                          justDone.has(t.id) && 'ring-2 ring-[#34C759]/40',
                         )}
-                      />
+                        data-testid={`mini-todo-global-${t.id}`}
+                        onClick={() => checkTodo(t.id, t.done)}
+                        aria-label={t.done ? '取消完成' : '标记完成'}
+                      >
+                        <motion.svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          initial={false}
+                          animate={{ scale: t.done ? 1 : 0.3, opacity: t.done ? 1 : 0 }}
+                          transition={springSnappy}
+                        >
+                          <path d="M2 6.4l2.6 2.6L10 3.4" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        </motion.svg>
+                      </button>
                       <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
                       <span
                         className={clsx(
-                          'flex-none text-[10px]',
+                          'flex-none text-[11px]',
                           d.tone === 'today' ? 'text-[#C2740A]' : 'text-ink-4',
                         )}
                       >

@@ -14,7 +14,7 @@ import { Icon, Overlay, Segmented, ToastHost, springSoft } from './components/ui
 import { MonthView, TermView } from './components/CalendarViews'
 import { AddCourseDialog, DraftTray } from './components/AddCourseDialog'
 import { TitleBar } from './components/TitleBar'
-import { setTheme, MAIN_THEME_KEY } from './lib/theme'
+import { setTheme, syncMiniTheme, MAIN_THEME_KEY } from './lib/theme'
 import { colorOf } from './lib/palette'
 import { mondayOfWeek, pad2, weekIndexOf } from './lib/time'
 import { toast } from './lib/toast'
@@ -56,7 +56,9 @@ export default function App() {
   const settingsTheme = settings.theme ?? 'dark'
   useEffect(() => {
     setTheme(settingsTheme, MAIN_THEME_KEY)
-  }, [settingsTheme])
+    // 只有用户明确开启「浮窗跟随主题」时才同步给浮窗
+    if (settings.miniFollowTheme) syncMiniTheme(settingsTheme)
+  }, [settingsTheme, settings.miniFollowTheme])
 
   const openTodoCount = useMemo(() => todos.filter((t) => !t.done && !t.archived).length, [todos])
 
