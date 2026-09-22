@@ -1,12 +1,15 @@
-# Lumen 课程表 · Cargo 配置
+# DOGEEER 课表 · Cargo 配置
 #
-# 两个关键点（国内 Windows 环境实测）：
-#  1. 默认的 static.crates.io 下载速度只有 ~1KB/s，必须换成国内镜像；
-#  2. MSYS2 自带的 gcc 在当前环境下无法正常链接（连 hello world 都失败，
-#     collect2 返回 53/123），因此改用 Rust 工具链自带的 rust-lld，
-#     并显式指定 MinGW 导入库目录。
+# 本机（国内 Windows）实测到的两个坑：
+#  1. 默认的 static.crates.io 下载只有 ~1KB/s，必须换国内镜像；
+#  2. MSYS2 自带的 gcc 无法正常链接（连 hello world 都失败，collect2 返回 53/123），
+#     所以改用 Rust 工具链自带的 rust-lld，并显式指定 MinGW 导入库目录。
 #
-# 若你在国外网络或已装 Visual Studio，可把 [source] 段删掉、把 linker 换成 link.exe。
+# 注意：不要再往这里加 WebView2LoaderStatic.lib —— rustflags 会作用于**所有**
+# crate 的链接命令（包括 build script），会直接构建失败。
+# 打包所需的一切都在 src-tauri/build.rs 里处理。
+#
+# 若你在国外网络或已装 Visual Studio，可删掉 [source] 段、把 linker 换成 link.exe。
 
 [source.crates-io]
 replace-with = 'rsproxy-sparse'

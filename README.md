@@ -76,6 +76,13 @@
 | 安装程序（NSIS，当前用户免管理员） | `src-tauri/target/release/bundle/nsis/DOGEEER课表_0.1.0_x64-setup.exe` | ~1.5 MB |
 | 免安装可执行文件 | `src-tauri/target/release/desk-course.exe` | ~4 MB |
 
+> **WebView2Loader.dll 必须随包安装**：Tauri 在 Windows 上是动态加载它的，
+> 而 `webview2-com-sys` 只把它复制到 cargo 的构建目录、不会进 bundle。
+> 所以免安装版的 exe 能跑，装完却会报「找不到 webview2loader.dll」。
+> `src-tauri/build.rs` 会自动把它复制到 `target/release/`，
+> 再由 `tauri.conf.json` 的 `bundle.resources` 收进安装包。
+> 改动打包配置后请跑一次 `node scripts/verify-installer.mjs` 做冒烟测试。
+>
 > 首次 `npm run app:build` 时 Tauri 会从 GitHub 下载 NSIS（约 2.3MB）。国内网络可能超时，
 > 可先用镜像预置到缓存目录，再重新执行打包：
 >
@@ -97,6 +104,8 @@ npm run build        # 仅构建前端（主窗口 + 浮窗两个入口）
 
 node scripts/selftest.mjs "课表.xlsx"   # 解析器 + 吸附算法自测（35 项）
 node scripts/e2e.mjs "课表.xlsx"        # 端到端验收（注入课表 → 断言 → 截图）
+node scripts/verify-schedule.mjs "课表.xlsx"   # 排课与表格一致性逐条比对
+node scripts/verify-installer.mjs             # 安装包冒烟测试（静默安装 → 启动 → 卸载）
 ```
 
 ### Rust 工具链（Windows，国内网络）
