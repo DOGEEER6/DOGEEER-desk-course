@@ -16,6 +16,7 @@ import { mondayOfWeek, pad2, weekIndexOf } from './lib/time'
 import { toast } from './lib/toast'
 import { findCurrentClass } from './hooks'
 import { isDesktop, launchedAtStartup, showMainWindow } from './lib/desktop'
+import { parseTimetableFile } from './lib/excel'
 
 export default function App() {
   const now = useNow(1000)
@@ -86,7 +87,6 @@ export default function App() {
   /* ---------------- 拖入文件导入 ---------------- */
   const handleDroppedFile = useCallback((file: File) => {
     void (async () => {
-      const { parseTimetableFile } = await import('./lib/excel')
       try {
         const parsed = await parseTimetableFile(await file.arrayBuffer(), {
           totalWeeks: useApp.getState().settings.semester.totalWeeks,
