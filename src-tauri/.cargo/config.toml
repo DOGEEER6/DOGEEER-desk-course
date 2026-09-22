@@ -1,20 +1,30 @@
-# Lumen 课程表 · Cargo 配置（国内镜像 + MinGW 链接器）
-# 由构建脚本生成，可安全删除或修改
+# Lumen 课程表 · Cargo 配置
+#
+# 两个关键点（国内 Windows 环境实测）：
+#  1. 默认的 static.crates.io 下载速度只有 ~1KB/s，必须换成国内镜像；
+#  2. MSYS2 自带的 gcc 在当前环境下无法正常链接（连 hello world 都失败，
+#     collect2 返回 53/123），因此改用 Rust 工具链自带的 rust-lld，
+#     并显式指定 MinGW 导入库目录。
+#
+# 若你在国外网络或已装 Visual Studio，可把 [source] 段删掉、把 linker 换成 link.exe。
 
 [source.crates-io]
-replace-with = 'tuna'
+replace-with = 'rsproxy-sparse'
 
-[source.tuna]
-registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
 
 [net]
 git-fetch-with-cli = true
 retry = 3
 
 [target.x86_64-pc-windows-gnu]
-linker = "C:/msys64/mingw64/bin/gcc.exe"
-ar = "C:/msys64/mingw64/bin/ar.exe"
+linker = "rust-lld"
+rustflags = [
+  "-C", "link-arg=-LC:/msys64/mingw64/lib",
+  "-C", "link-arg=-LC:/msys64/mingw64/x86_64-w64-mingw32/lib",
+  "-C", "link-arg=--no-insert-timestamp",
+]
 
 [build]
-# 让增量编译更快
 incremental = true

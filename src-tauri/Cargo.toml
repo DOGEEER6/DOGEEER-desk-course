@@ -8,7 +8,9 @@ rust-version = "1.77.2"
 
 [lib]
 name = "desk_course_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# 仅构建静态库：不加 cdylib，避免 GNU 工具链下 DLL 导出符号超过 65535 上限
+# （Tauri 官方模板里 cdylib/staticlib 是给移动端用的，桌面端用不到）
+crate-type = ["staticlib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

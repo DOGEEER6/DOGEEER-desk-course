@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '../store'
 import type { Weekday } from '../types'
@@ -338,23 +338,56 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   )
 }
 
+/**
+ * 全窗口拖放导入。
+ *
+ * 关键：这个遮罩**必须默认不可见且不接收指针事件**，
+ * 否则它会盖住整个界面，让课表卡片的点击/拖动全部失效。
+ * 只有在真正发生文件拖入（dataTransfer 里带 Files）时才显示并接管事件。
+ */
 export function ImportDropOverlay({ onFile }: { onFile: (f: File) => void }) {
   const [active, setActive] = useState(false)
+  const depth = useRef(0)
+
+  useEffect(() => {
+    // 通过 dragenter/dragleave 计数判断是否还在窗口内
+    const onEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return
+      depth.current += 1
+      setActive(true)
+    }
+    const onLeave = () => {
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setActive(false)
+    }
+    const onDrop = () => {
+      depth.current = 0
+      setActive(false)
+    }
+    window.addEventListener('dragenter', onEnter)
+    window.addEventListener('dragleave', onLeave)
+    window.addEventListener('drop', onDrop)
+    window.addEventListener('dragend', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onEnter)
+      window.removeEventListener('dragleave', onLeave)
+      window.removeEventListener('drop', onDrop)
+      window.removeEventListener('dragend', onDrop)
+    }
+  }, [])
+
   return (
     <div
       className="fixed inset-0 z-[80]"
-      onDragEnter={(e) => {
-        e.preventDefault()
-        setActive(true)
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setActive(false)
+      style={{ pointerEvents: active ? 'auto' : 'none' }}
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types?.includes('Files')) e.preventDefault()
       }}
       onDrop={(e) => {
         e.preventDefault()
+        depth.current = 0
         setActive(false)
-        const f = e.dataTransfer.files?.[0]
+        const f = e.dataTransfer?.files?.[0]
         if (f) onFile(f)
       }}
     >

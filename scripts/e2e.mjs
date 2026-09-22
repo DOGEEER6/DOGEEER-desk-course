@@ -20,7 +20,10 @@ const xlsxPath = process.argv[2] ?? 'D:\\dsh\\_seu_timetable.xlsx'
 const shotDir = resolve(process.argv[3] ?? join(root, 'node_modules', '.cache', 'shots'))
 mkdirSync(shotDir, { recursive: true })
 
-const PORT = 9333
+/** CDP 端口：默认 9333（Edge 预览），传入 Tauri/WebView2 的端口可以验收真实桌面应用 */
+const PORT = Number(process.env.LUMEN_CDP_PORT ?? process.argv[4] ?? 9333)
+/** 目标页面 URL 片段，用来在多个 page target 里挑选目标 */
+const TARGET_HINT = process.env.LUMEN_TARGET ?? '5183'
 
 /* ---------- 1. 解析课表（复用应用内解析器） ---------- */
 const outfile = join(cache, 'excel.mjs')
@@ -152,12 +155,18 @@ const payload = {
 
 /* ---------- 3. CDP ---------- */
 const targets = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
-const page = targets.find((t) => t.type === 'page' && /5183/.test(t.url))
+const wantsMini = TARGET_HINT.includes('mini')
+const page =
+  targets.find((t) => t.type === 'page' && t.url.includes(TARGET_HINT) && (wantsMini ? t.url.includes('mini') : !t.url.includes('mini'))) ??
+  targets.find((t) => t.type === 'page' && t.url.includes('mini') === wantsMini)
 if (!page) {
-  console.error('找不到目标页面，请确认 Edge 以 --remote-debugging-port=9333 启动且已打开 127.0.0.1:5183')
+  console.error(
+    `找不到目标页面（port=${PORT}, hint=${TARGET_HINT}）。浏览器预览请用 --remote-debugging-port=9333 启动 Edge；` +
+      `桌面应用请先设置 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9444`,
+  )
   process.exit(1)
 }
-console.log('目标页面:', page.url)
+console.log('目标页面:', page.url, `(port=${PORT})`)
 
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((res, rej) => {
@@ -198,10 +207,14 @@ async function clickSelector(selector, index = 0) {
   const box = await evaluate(`
     const el = document.querySelectorAll(${JSON.stringify(selector)})[${index}];
     if (!el) return null;
+    // 关键：先把元素滚进视口，否则 CDP 的坐标点击会被丢弃
+    el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    await new Promise(r => setTimeout(r, 350));
     const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 20) };
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + Math.min(r.height / 2, 20)) };
   `)
   if (!box) throw new Error(`元素不存在: ${selector}`)
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y })
   for (const type of ['mousePressed', 'mouseReleased']) {
     await send('Input.dispatchMouseEvent', {
       type,
@@ -211,7 +224,7 @@ async function clickSelector(selector, index = 0) {
       clickCount: 1,
       buttons: type === 'mousePressed' ? 1 : 0,
     })
-    await new Promise((r) => setTimeout(r, 60))
+    await new Promise((r) => setTimeout(r, 70))
   }
   return box
 }
@@ -246,7 +259,7 @@ try {
 }
 
 /* ---------- 4. 注入数据并刷新 ---------- */
-await send('Page.navigate', { url: 'http://127.0.0.1:5183/' })
+await send('Page.navigate', { url: page.url })
 const ready = await waitReady()
 console.log(`页面就绪: ${ready}`)
 await new Promise((r) => setTimeout(r, 1200))
@@ -310,9 +323,12 @@ const beforeDrag = await evaluate(`
 `)
 const cardBox = await evaluate(`
   const el = document.querySelector('.tt-card');
+  el.scrollIntoView({ block: 'center' });
+  await new Promise(r => setTimeout(r, 350));
   const r = el.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 20) };
+  return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + Math.min(r.height / 2, 20)) };
 `)
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: cardBox.x, y: cardBox.y })
 await send('Input.dispatchMouseEvent', {
   type: 'mousePressed', x: cardBox.x, y: cardBox.y, button: 'left', clickCount: 1, buttons: 1,
 })

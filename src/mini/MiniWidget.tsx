@@ -17,29 +17,10 @@ import { useNow } from '../hooks'
 
 /* ---------------- Tauri 桥接（浏览器下自动降级为 no-op） ---------------- */
 
-const w = () => window as unknown as Record<string, unknown>
-
-async function tauriInvoke<T = void>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
-  const api = w().__TAURI_INTERNALS__ as { invoke?: (c: string, a?: unknown) => Promise<T> } | undefined
-  if (!api?.invoke) return null
-  try {
-    return await api.invoke(cmd, args)
-  } catch {
-    return null
-  }
-}
-
-async function closeMini() {
-  const api = w().__TAURI_INTERNALS__ as { invoke?: (c: string, a?: unknown) => Promise<unknown> } | undefined
-  if (api?.invoke) {
-    await api.invoke('hide_mini')
-    return
-  }
-  window.close()
-}
+import { hideCurrentWindow, showMainWindow } from '../lib/desktop'
 
 async function openApp() {
-  const done = await tauriInvoke('show_main')
+  const done = await showMainWindow()
   if (done == null) window.open('/', '_blank')
 }
 
@@ -141,7 +122,7 @@ export default function MiniWidget() {
           </div>
           <button
             className="btn h-6 w-6 flex-none text-ink-4 hover:bg-slate-900/8 hover:text-ink-2"
-            onClick={() => void closeMini()}
+            onClick={() => void hideCurrentWindow()}
             title="隐藏浮窗"
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
@@ -150,15 +131,17 @@ export default function MiniWidget() {
         </header>
 
         {/* 主体 */}
-        <div className="scroll-y min-h-0 flex-1 px-2.5 pb-1">
+        <div className="scroll-y flex min-h-0 flex-1 flex-col px-2.5 pb-1">
           {rows.length === 0 && (
-            <div className="grid place-items-center py-10 text-center">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-900/5 text-ink-4">
-                <Icon name="sun" size={18} />
-              </div>
-              <div className="mt-2 text-[12px] font-semibold text-ink-3">今天没有课</div>
-              <div className="mt-0.5 text-[10.5px] text-ink-4">
-                {openCount > 0 ? `还有 ${openCount} 项待办可以做` : '好好休息'}
+            <div className="grid flex-1 place-items-center py-10 text-center">
+              <div>
+                <div className="mx-auto grid h-10 w-10 place-items-center rounded-2xl bg-slate-900/5 text-ink-4">
+                  <Icon name="sun" size={18} />
+                </div>
+                <div className="mt-2 text-[12px] font-semibold text-ink-3">今天没有课</div>
+                <div className="mt-0.5 text-[10.5px] text-ink-4">
+                  {openCount > 0 ? `还有 ${openCount} 项待办可以做` : '好好休息'}
+                </div>
               </div>
             </div>
           )}
