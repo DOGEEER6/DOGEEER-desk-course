@@ -46,6 +46,8 @@ export interface Session {
   note?: string
   /** 该时段是否启用上课提醒 */
   remind?: boolean
+  /** 尚未排到课表上（在「未排课时段」托盘里等待拖放） */
+  draft?: boolean
 }
 
 /** 课程 */

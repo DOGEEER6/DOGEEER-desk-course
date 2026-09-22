@@ -27,14 +27,14 @@ export function TodayHero({ now, onOpenCourse }: { now: Date; onOpenCourse: (id:
         className="relative overflow-hidden rounded-[24px] p-5"
         style={{
           background: shown
-            ? `linear-gradient(145deg, ${color.from}, ${color.to} 60%, #ffffff)`
-            : 'linear-gradient(145deg, #f3f6fc, #e9eefb)',
-          border: `1px solid ${shown ? color.ring : 'rgba(15,23,42,0.07)'}`,
+            ? `linear-gradient(145deg, ${color.from}, ${color.to} 60%, var(--c-hero-from))`
+            : 'linear-gradient(145deg, var(--c-hero-from), var(--c-hero-to))',
+          border: `1px solid ${shown ? color.ring : 'var(--c-line-strong)'}`,
         }}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-wider" style={{ color: shown ? color.text : '#6b7688' }}>
+            <div className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-wider" style={{ color: shown ? color.text : 'var(--color-ink-3)' }}>
               {current ? (
                 <>
                   <span className="live-dot inline-block h-2 w-2 rounded-full bg-[#FF3B30]" />
@@ -58,7 +58,7 @@ export function TodayHero({ now, onOpenCourse }: { now: Date; onOpenCourse: (id:
               >
                 <div
                   className="mt-1.5 truncate text-[26px] font-bold leading-[1.15] tracking-[-0.03em]"
-                  style={{ color: shown ? color.text : '#0b1220' }}
+                  style={{ color: shown ? color.text : 'var(--c-hero-text)' }}
                 >
                   {shown ? shown.name : '今天没有课'}
                 </div>

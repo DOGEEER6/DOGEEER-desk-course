@@ -42,6 +42,7 @@ type IconName =
   | 'sparkle'
   | 'download'
   | 'warning'
+  | 'grip'
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -162,6 +163,11 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M12 3.8l8.6 15.4H3.4z" />
       <path d="M12 9.5v4.2M12 16.6h.01" />
+    </>
+  ),
+  grip: (
+    <>
+      <path d="M4 8h16M4 12h10M4 16h13" />
     </>
   ),
 }

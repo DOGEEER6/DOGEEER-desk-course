@@ -31,9 +31,20 @@ export interface TimetableProps {
   showWeekend: boolean
   onOpenCourse: (courseId: string) => void
   onAddAt?: (day: Weekday, startPeriod: number, endPeriod: number) => void
+  /** 从「未排课时段」托盘拖入的时段；null 表示当前没有草稿在拖 */
+  incomingDraft?: { courseId: string; sessionId: string; label: string; span: number } | null
+  /** 拖入落位回调 */
+  onDraftPlaced?: (courseId: string, sessionId: string, day: Weekday, startPeriod: number, endPeriod: number) => void
 }
 
-export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: TimetableProps) {
+export function Timetable({
+  week,
+  showWeekend,
+  onOpenCourse,
+  onAddAt,
+  incomingDraft,
+  onDraftPlaced,
+}: TimetableProps) {
   const courses = useApp((s) => s.courses)
   const periods = useApp((s) => s.periods)
   const settings = useApp((s) => s.settings)
@@ -42,9 +53,60 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
 
   const days = showWeekend ? ([1, 2, 3, 4, 5, 6, 7] as Weekday[]) : ([1, 2, 3, 4, 5] as Weekday[])
   const [drag, setDrag] = useState<DragState | null>(null)
+  /** 托盘拖入时的吸附预览 */
+  const [ghost, setGhost] = useState<{ day: Weekday; startPeriod: number; endPeriod: number } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const startDate = settings.semester.startDate
   const totalPeriods = periods.length || 13
+
+  /* ---------------- 从托盘拖入 ---------------- */
+  useEffect(() => {
+    if (!incomingDraft) {
+      setGhost(null)
+      return
+    }
+    const host0 = gridRef.current
+    if (!host0) return
+
+    const compute = (clientX: number, clientY: number) => {
+      const rect = host0.getBoundingClientRect()
+      if (
+        clientX < rect.left ||
+        clientX > rect.right ||
+        clientY < rect.top - 8 ||
+        clientY > rect.bottom + 8
+      ) {
+        setGhost(null)
+        return null
+      }
+      const colW = rect.width / days.length
+      const di = Math.max(0, Math.min(days.length - 1, Math.floor((clientX - rect.left) / colW)))
+      const row = Math.max(0, Math.min(totalPeriods - 1, Math.floor((clientY - rect.top) / PERIOD_H)))
+      const span = Math.max(1, incomingDraft.span)
+      let start = row + 1
+      if (start + span - 1 > totalPeriods) start = Math.max(1, totalPeriods - span + 1)
+      const target = { day: days[di], startPeriod: start, endPeriod: start + span - 1 }
+      setGhost(target)
+      return target
+    }
+
+    const onMove = (e: PointerEvent) => {
+      compute(e.clientX, e.clientY)
+    }
+    const onUp = (e: PointerEvent) => {
+      const target = compute(e.clientX, e.clientY)
+      setGhost(null)
+      if (target) onDraftPlaced?.(incomingDraft.courseId, incomingDraft.sessionId, target.day, target.startPeriod, target.endPeriod)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    document.body.setAttribute('data-dragging', 'true')
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.removeAttribute('data-dragging')
+    }
+  }, [incomingDraft, days, totalPeriods, onDraftPlaced])
 
   /* ---------------- 拖动逻辑 ---------------- */
 
@@ -151,6 +213,8 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
     for (const c of courses) {
       if (c.archived) continue
       for (const s of c.sessions) {
+        // 未排课的时段留在托盘里，不上网格
+        if (s.draft) continue
         if (!sessionCoversWeek(s, week)) continue
         if (!days.includes(s.day)) continue
         out.push({ course: c, session: s })
@@ -161,7 +225,8 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
 
   const hiddenThisWeek = useMemo(() => {
     let n = 0
-    for (const c of courses) for (const s of c.sessions) if (!sessionCoversWeek(s, week)) n++
+    for (const c of courses)
+      for (const s of c.sessions) if (!s.draft && !sessionCoversWeek(s, week)) n++
     return n
   }, [courses, week])
 
@@ -252,6 +317,28 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
                   height: (drag.target.endPeriod - drag.target.startPeriod + 1) * PERIOD_H - 6,
                 }}
               />
+            )}
+
+            {/* 托盘拖入时的落位预览 */}
+            {ghost && (
+              <motion.div
+                layout
+                className="snap-guide"
+                transition={springSnappy}
+                style={{
+                  left: `calc(${((ghost.day - 1) / days.length) * 100}% + 3px)`,
+                  width: `calc(${(1 / days.length) * 100}% - 6px)`,
+                  top: (ghost.startPeriod - 1) * PERIOD_H + 3,
+                  height: (ghost.endPeriod - ghost.startPeriod + 1) * PERIOD_H - 6,
+                  background: 'rgba(52,199,89,0.18)',
+                  boxShadow: 'inset 0 0 0 2px rgba(52,199,89,0.75)',
+                }}
+              >
+                <span className="absolute left-2 top-1.5 text-[11px] font-bold text-[#1D9E45]">
+                  {incomingDraft?.label} → 周{'一二三四五六日'[ghost.day - 1]} 第 {ghost.startPeriod}
+                  {ghost.endPeriod !== ghost.startPeriod ? `-${ghost.endPeriod}` : ''} 节
+                </span>
+              </motion.div>
             )}
 
             {/* 课程卡片 */}

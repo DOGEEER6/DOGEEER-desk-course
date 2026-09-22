@@ -260,23 +260,25 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
         </Card>
 
         {/* 外观 */}
-        <Card title="外观" icon="sparkle">
-          <Row label="主题">
-            <Segmented<ThemeMode>
-              value={settings.theme ?? 'system'}
-              onChange={(v) => {
-                setTheme(v)
-                updateSettings({ theme: v })
-              }}
-              options={[
-                { value: 'system', label: '跟随系统' },
-                { value: 'light', label: '浅色' },
-                { value: 'dark', label: '深色' },
-              ]}
-            />
-          </Row>
-          <p className="mt-2 text-[11px] leading-5 text-ink-4">
-            深色模式适合深色桌面壁纸，浮窗与主界面会一起切换。
+        <Card title="颜色模式" icon="sparkle">
+          <Segmented<ThemeMode>
+            value={settings.theme ?? 'dark'}
+            onChange={(v) => {
+              setTheme(v)
+              updateSettings({ theme: v })
+              toast(
+                v === 'dark' ? '已切换到深色模式' : v === 'light' ? '已切换到浅色模式' : '已跟随系统',
+                { tone: 'success', duration: 2000 },
+              )
+            }}
+            options={[
+              { value: 'dark', label: '深色' },
+              { value: 'light', label: '浅色' },
+              { value: 'system', label: '跟随系统' },
+            ]}
+          />
+          <p className="mt-2.5 text-[11px] leading-5 text-ink-4">
+            默认深色，适合深色桌面壁纸；浮窗会跟随这个选择（切到浅色时浮窗也是浅色玻璃）。
           </p>
         </Card>
 

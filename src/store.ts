@@ -38,7 +38,8 @@ export const defaultSettings: AppSettings = {
   tickSeconds: 30,
   /** 浮窗默认「在桌面上即可」，不抢占最前 */
   miniAlwaysOnTop: false,
-  theme: 'system',
+  /** 默认深色 */
+  theme: 'dark',
 }
 
 interface AppState {
@@ -71,6 +72,12 @@ interface AppState {
   removeSession: (courseId: string, sessionId: string) => void
   /** 拖动 / 拉伸后落位（自动合并同一门课的重复时段） */
   placeSession: (
+    courseId: string,
+    sessionId: string,
+    pos: { day: Weekday; startPeriod: number; endPeriod: number },
+  ) => void
+  /** 把「未排课时段」拖到课表上：清掉 draft 标记并落到目标位置 */
+  placeDraft: (
     courseId: string,
     sessionId: string,
     pos: { day: Weekday; startPeriod: number; endPeriod: number },
@@ -115,6 +122,7 @@ function normalizeSession(s: SessionInput): Session {
     teacher: s.teacher,
     note: s.note,
     remind: s.remind ?? true,
+    draft: s.draft ?? false,
   }
 }
 function normalizeCourse(c: CourseInput): Course {
@@ -274,6 +282,28 @@ export const useApp = create<AppState>()(
             }
             return { ...c, sessions: [...rest, moved] }
           }),
+        })),
+
+      placeDraft: (courseId, sessionId, pos) =>
+        set((s) => ({
+          courses: s.courses.map((c) =>
+            c.id === courseId
+              ? {
+                  ...c,
+                  sessions: c.sessions.map((x) =>
+                    x.id === sessionId
+                      ? normalizeSession({
+                          ...x,
+                          day: pos.day,
+                          startPeriod: pos.startPeriod,
+                          endPeriod: pos.endPeriod,
+                          draft: false,
+                        })
+                      : x,
+                  ),
+                }
+              : c,
+          ),
         })),
 
       addTodo: (t) => {

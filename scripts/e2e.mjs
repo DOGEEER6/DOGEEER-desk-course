@@ -543,6 +543,112 @@ if (TARGET_HINT.includes('tauri')) {
   check('标题栏含最小化/最大化/关闭', JSON.stringify(btns).includes('最小化') && JSON.stringify(btns).includes('关闭'), JSON.stringify(btns))
 }
 
+// 添加课程 → 未排课托盘 → 拖到课表上排课
+await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' })); return 'ok'`)
+await new Promise((r) => setTimeout(r, 800))
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '添加课程')?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 1000))
+const dlgText = await evaluate(`return document.body.innerText`)
+check('添加课程表单可打开', /添加课程/.test(dlgText) && /上课周次/.test(dlgText) && /上课时段/.test(dlgText))
+
+const filled = await evaluate(`
+  const inp = document.querySelector('input[placeholder="例如：操作系统"]');
+  if (!inp) return 'no-input';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setter.call(inp, '编译原理');
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  return 'ok';
+`)
+check('可填写课程名称', filled === 'ok', String(filled))
+
+// 在预览网格里拖选一个时段
+const previewBox = await evaluate(`
+  const grid = document.querySelector('.grid.grid-cols-7.gap-1.rounded-2xl');
+  if (!grid) return null;
+  const r = grid.getBoundingClientRect();
+  const colW = r.width / 7;
+  const rowH = r.height / 13;
+  return { x: Math.round(r.left + colW * 2.5), y: Math.round(r.top + rowH * 3.5), rowH: Math.round(rowH) };
+`)
+check('时段选择网格存在', !!previewBox)
+if (previewBox) {
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: previewBox.x, y: previewBox.y })
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: previewBox.x, y: previewBox.y, button: 'left', clickCount: 1, buttons: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: previewBox.x, y: previewBox.y + previewBox.rowH, button: 'left', buttons: 1 })
+  await new Promise((r) => setTimeout(r, 200))
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: previewBox.x, y: previewBox.y + previewBox.rowH, button: 'left', buttons: 0 })
+}
+await new Promise((r) => setTimeout(r, 700))
+check('可拖动选择上课时段', /周[一二三四五六日]\s*第\s*\d+-\d+\s*节/.test(await evaluate(`return document.body.innerText`)))
+await shot('15-add-course-form')
+
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '创建课程')?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 1500))
+check('创建后出现未排课托盘', /未排课时段/.test(await evaluate(`return document.body.innerText`)))
+check(
+  '新课程已写入且时段为未排课',
+  await evaluate(`
+    const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+    const c = s.state.courses.find(x => x.name === '编译原理');
+    return !!c && c.sessions.length === 1 && c.sessions[0].draft === true;
+  `),
+)
+await shot('16-draft-tray')
+
+// 把托盘里的课程拖到课表上
+const beforePlace = await evaluate(`
+  const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+  const c = s.state.courses.find(x => x.name === '编译原理');
+  return JSON.stringify(c.sessions.map(x => ({ day: x.day, sp: x.startPeriod, ep: x.endPeriod, draft: x.draft })));
+`)
+const dropGeo = await evaluate(`
+  const chip = document.querySelector('[data-testid^="draft-"]');
+  const axis = Array.from(document.querySelectorAll('div')).find(d => d.className.includes('w-[54px]'));
+  if (!chip || !axis) return null;
+  const cr = chip.getBoundingClientRect();
+  const hr = axis.parentElement.getBoundingClientRect();
+  return {
+    chip: [Math.round(cr.left + cr.width / 2), Math.round(cr.top + cr.height / 2)],
+    grid: [Math.round(hr.left), Math.round(hr.top), Math.round(hr.width)],
+  };
+`)
+check('托盘条目可定位', !!dropGeo)
+if (dropGeo) {
+  const [cx, cy] = dropGeo.chip
+  const [gx, gy, gw] = dropGeo.grid
+  const tx = Math.round(gx + (gw / 5) * 3.5)
+  const ty = Math.round(gy + 68 * 1.5)
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: cx, y: cy })
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: cx, y: cy, button: 'left', clickCount: 1, buttons: 1 })
+  await new Promise((r) => setTimeout(r, 130))
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round((cx + tx) / 2), y: Math.round((cy + ty) / 2), button: 'left', buttons: 1 })
+  await new Promise((r) => setTimeout(r, 110))
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: tx, y: ty, button: 'left', buttons: 1 })
+  await new Promise((r) => setTimeout(r, 220))
+  check('拖动时显示落位预览', /→ 周/.test(await evaluate(`return document.body.innerText`)))
+  await shot('17-drop-preview')
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: tx, y: ty, button: 'left', buttons: 0 })
+  await new Promise((r) => setTimeout(r, 1400))
+}
+const afterPlace = await evaluate(`
+  const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+  const c = s.state.courses.find(x => x.name === '编译原理');
+  return JSON.stringify(c.sessions.map(x => ({ day: x.day, sp: x.startPeriod, ep: x.endPeriod, draft: x.draft })));
+`)
+check('拖放后排课成功', beforePlace !== afterPlace && /"draft":false/.test(afterPlace), `${beforePlace} -> ${afterPlace}`)
+check(
+  '托盘已清空',
+  (await evaluate(`return document.querySelectorAll('[data-testid^="draft-"]').length`)) === 0,
+)
+check('新课出现在课表上', /编译原理/.test(await evaluate(`return document.body.innerText`)))
+await shot('18-dropped')
+
 const consoleErrors = await evaluate(`return window.__lumenErrors ? window.__lumenErrors.length : 0`)
 check('无未捕获错误标记', consoleErrors === 0, `errors=${consoleErrors}`)
 

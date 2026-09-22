@@ -1,12 +1,14 @@
 /**
- * 主题：跟随 Windows 的浅色 / 深色设置，也支持手动指定。
- * 在应用入口最先执行，避免首帧闪白。
+ * 主题：浅色 / 深色 / 跟随系统。
+ * 主窗口与浮窗各自独立存储（生产环境下两者是不同 origin），
+ * 但主窗口会把选择广播给浮窗，保证观感一致。
  */
 export type ThemeMode = 'system' | 'light' | 'dark'
 
-const KEY = 'lumen-theme'
-let media: MediaQueryList | null = null
-let current: ThemeMode = 'system'
+export const MAIN_THEME_KEY = 'lumen-theme'
+export const MINI_THEME_KEY = 'lumen-mini-theme'
+
+let current: ThemeMode = 'dark'
 
 function systemDark(): boolean {
   try {
@@ -26,43 +28,54 @@ export function getTheme(): ThemeMode {
   return current
 }
 
-/** 当前实际是不是深色（用于需要 JS 判断的场景） */
 export function isDark(): boolean {
   return document.documentElement.dataset.theme === 'dark'
 }
 
-export function setTheme(mode: ThemeMode) {
+export function applyTheme(mode: ThemeMode) {
+  current = mode
+  apply(mode)
+}
+
+export function setTheme(mode: ThemeMode, key: string = MAIN_THEME_KEY) {
   current = mode
   try {
-    localStorage.setItem(KEY, mode)
+    localStorage.setItem(key, mode)
+    // 主窗口改主题时，同步给浮窗（生产环境两者同源，可直接写）
+    if (key === MAIN_THEME_KEY) localStorage.setItem(MINI_THEME_KEY, mode)
   } catch {
     /* ignore */
   }
   apply(mode)
 }
 
-/** 在入口调用一次：读取偏好 + 监听系统切换 */
-export function initTheme(): ThemeMode {
-  let stored: ThemeMode = 'system'
+function read(key: string, fallback: ThemeMode): ThemeMode {
   try {
-    const v = localStorage.getItem(KEY)
-    if (v === 'light' || v === 'dark' || v === 'system') stored = v
+    const v = localStorage.getItem(key)
+    if (v === 'light' || v === 'dark' || v === 'system') return v
   } catch {
     /* ignore */
   }
-  current = stored
-  apply(stored)
+  return fallback
+}
 
+/**
+ * 入口调用一次。
+ * @param key      存储键（主窗口 / 浮窗各一份）
+ * @param fallback 没存过时的默认值 —— 产品默认**深色**
+ */
+export function initTheme(key: string = MAIN_THEME_KEY, fallback: ThemeMode = 'dark'): ThemeMode {
+  const mode = read(key, fallback)
+  applyTheme(mode)
   try {
-    media = window.matchMedia('(prefers-color-scheme: dark)')
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = () => {
       if (current === 'system') apply('system')
     }
-    // 兼容旧版 WebView
     if (media.addEventListener) media.addEventListener('change', onChange)
     else media.addListener?.(onChange)
   } catch {
     /* ignore */
   }
-  return stored
+  return mode
 }

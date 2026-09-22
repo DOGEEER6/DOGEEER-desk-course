@@ -179,34 +179,34 @@ export default function MiniWidget() {
   const hasDdlSection = upcoming.overdue.length > 0 || upcoming.soon.length > 0
 
   return (
-    /* 窗口本身有系统圆角，卡片铺满即可 */
-    <div className="relative h-full w-full overflow-hidden">
-      <div className="frost frost-card relative flex h-full w-full flex-col overflow-hidden rounded-[12px]">
+    /* 卡片留出 1px 让位给 Windows 自绘窗口边缘，避免出现一圈灰描边 */
+    <div className="relative h-full w-full overflow-hidden rounded-[9px]">
+      <div className="frost frost-card relative flex h-full w-full flex-col overflow-hidden rounded-[8px]">
         {/* 顶部高光，深色桌面上更立体 */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-24 opacity-70"
           style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0))' }}
         />
 
-        {/* 头部：可拖动 */}
-        <header className="drag-handle relative z-[1] flex flex-none items-center gap-2.5 px-3.5 pb-2 pt-2.5">
-          <div className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white shadow-[0_5px_12px_-5px_rgba(10,132,255,0.95)]">
-            <Icon name="calendar" size={15} />
+        {/* 头部 */}
+        <header className="drag-handle relative z-[1] flex flex-none items-center gap-3 px-4 pb-2.5 pt-3.5">
+          <div className="grid h-9 w-9 flex-none place-items-center rounded-[11px] bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white shadow-[0_6px_14px_-6px_rgba(10,132,255,0.95)]">
+            <Icon name="calendar" size={17} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[13px] font-extrabold leading-tight tracking-[-0.01em]">DOGEEER</span>
-              <span className="truncate text-[11.5px] font-medium text-ink-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[14px] font-extrabold leading-tight tracking-[-0.01em]">DOGEEER</span>
+              <span className="truncate text-[12px] font-medium text-ink-3">
                 {now.getMonth() + 1} 月 {now.getDate()} 日 · {WEEKDAY_FULL[weekday]}
               </span>
             </div>
-            <div className="truncate text-[10.5px] leading-tight text-ink-4">
+            <div className="mt-0.5 truncate text-[11px] leading-tight text-ink-4">
               第 {week} 教学周 · 今天 {rows.length} 节课
               {miniPinned ? ' · 已固定' : ''}
             </div>
           </div>
           <div className="tabular flex-none text-right">
-            <div className="text-[16px] font-bold leading-none tracking-[-0.02em]">
+            <div className="text-[17px] font-bold leading-none tracking-[-0.02em]">
               {pad2(now.getHours())}:{pad2(now.getMinutes())}
             </div>
           </div>
@@ -221,22 +221,22 @@ export default function MiniWidget() {
         </header>
 
         {/* 主体 */}
-        <div className="scroll-y relative z-[1] flex min-h-0 flex-1 flex-col px-2.5 pb-1">
+        <div className="scroll-y relative z-[1] flex min-h-0 flex-1 flex-col px-3 pb-1">
           {rows.length === 0 && (
             <div className="grid flex-1 place-items-center py-10 text-center">
               <div>
-                <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-surface-2 text-ink-4">
-                  <Icon name="sun" size={19} />
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-surface-2 text-ink-4">
+                  <Icon name="sun" size={21} />
                 </div>
-                <div className="mt-2 text-[12.5px] font-semibold text-ink-2">今天没有课</div>
-                <div className="mt-0.5 text-[11px] text-ink-4">
+                <div className="mt-3 text-[13.5px] font-semibold text-ink-2">今天没有课</div>
+                <div className="mt-1 text-[11.5px] text-ink-4">
                   {openCount > 0 ? `还有 ${openCount} 项待办可以做` : '好好休息'}
                 </div>
               </div>
             </div>
           )}
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {rows.map((r) => {
               const color = colorOf(r.course.color)
               const isCurrent = current?.course.id === r.course.id && current?.startPeriod === r.startPeriod
@@ -248,7 +248,7 @@ export default function MiniWidget() {
                 <div
                   key={key}
                   className={clsx(
-                    'overflow-hidden rounded-[14px] border transition-opacity',
+                    'overflow-hidden rounded-[16px] border transition-opacity',
                     isPast && !isCurrent && 'opacity-50',
                   )}
                   style={{
@@ -260,31 +260,31 @@ export default function MiniWidget() {
                   }}
                 >
                   <button
-                    className="no-drag flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+                    className="no-drag flex w-full items-center gap-3 px-3 py-2.5 text-left"
                     data-testid={`mini-course-${r.course.id}-${r.startPeriod}`}
                     onClick={() => setExpanded(isOpen ? null : key)}
                   >
-                    <div className="tabular w-[38px] flex-none">
-                      <div className="text-[11px] font-bold leading-tight">
+                    <div className="tabular w-[42px] flex-none">
+                      <div className="text-[12px] font-bold leading-tight">
                         {pad2(Math.floor(r.startMin / 60))}:{pad2(r.startMin % 60)}
                       </div>
-                      <div className="text-[9.5px] leading-tight opacity-70">
+                      <div className="mt-0.5 text-[10px] leading-tight opacity-70">
                         {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-[12.5px] font-bold leading-tight">{r.course.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[13.5px] font-bold leading-tight">{r.course.name}</span>
                         {isCurrent && (
-                          <span className="live-dot inline-block h-1.5 w-1.5 flex-none rounded-full bg-[#FF3B30]" />
+                          <span className="live-dot inline-block h-2 w-2 flex-none rounded-full bg-[#FF3B30]" />
                         )}
                         {!isCurrent && undone.length > 0 && (
-                          <span className="flex-none rounded-full bg-surface-3 px-1.5 text-[9.5px] font-bold">
+                          <span className="flex-none rounded-full bg-surface-3 px-2 py-[1px] text-[10px] font-bold">
                             {undone.length} 项作业
                           </span>
                         )}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-2 text-[10px] opacity-75">
+                      <div className="mt-1 flex items-center gap-2.5 text-[10.5px] opacity-75">
                         {r.room && <span className="truncate">{r.room}</span>}
                         <span className="tabular flex-none">
                           第 {r.startPeriod}
@@ -297,7 +297,7 @@ export default function MiniWidget() {
                       transition={springSnappy}
                       className="flex-none opacity-60"
                     >
-                      <Icon name="chevronDown" size={13} />
+                      <Icon name="chevronDown" size={14} />
                     </motion.span>
                   </button>
 
@@ -310,40 +310,40 @@ export default function MiniWidget() {
                         transition={springSoft}
                         className="overflow-hidden"
                       >
-                        <div className="no-drag px-2.5 pb-2">
-                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] opacity-85">
+                        <div className="no-drag px-3 pb-3">
+                          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[11px] opacity-85">
                             <span className="tabular flex items-center gap-1">
-                              <Icon name="clock" size={10} />
+                              <Icon name="clock" size={11} />
                               {pad2(Math.floor(r.startMin / 60))}:{pad2(r.startMin % 60)}–
                               {pad2(Math.floor(r.endMin / 60))}:{pad2(r.endMin % 60)}
                             </span>
                             {r.room && (
                               <span className="flex items-center gap-1">
-                                <Icon name="pin" size={10} />
+                                <Icon name="pin" size={11} />
                                 {r.room}
                               </span>
                             )}
                             {r.teacher && (
                               <span className="flex items-center gap-1">
-                                <Icon name="user" size={10} />
+                                <Icon name="user" size={11} />
                                 {r.teacher}
                               </span>
                             )}
                           </div>
 
-                          <div className="mt-1.5 rounded-[10px] bg-surface-1 p-2 text-ink">
-                            <div className="mb-1 flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider text-ink-4">
-                              <Icon name="flag" size={10} />
+                          <div className="mt-2.5 rounded-[12px] bg-surface-1 p-2.5 text-ink">
+                            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-4">
+                              <Icon name="flag" size={11} />
                               作业 / DDL
                             </div>
                             {r.todos.length === 0 ? (
-                              <div className="text-[10.5px] text-ink-4">这门课还没有作业</div>
+                              <div className="text-[11px] text-ink-4">这门课还没有作业</div>
                             ) : (
-                              <ul className="space-y-1">
+                              <ul className="space-y-1.5">
                                 {r.todos.slice(0, 5).map((t) => {
                                   const d = dueLabel(t.dueAt, now)
                                   return (
-                                    <li key={t.id} className="flex items-start gap-1.5">
+                                    <li key={t.id} className="flex items-start gap-2">
                                       <span
                                         className={clsx(
                                           'mt-[5px] h-1.5 w-1.5 flex-none rounded-full',
@@ -359,7 +359,7 @@ export default function MiniWidget() {
                                       <span className="min-w-0 flex-1">
                                         <span
                                           className={clsx(
-                                            'block text-[11px] font-medium leading-tight',
+                                            'block text-[11.5px] font-medium leading-tight',
                                             t.done && 'text-ink-4 line-through',
                                           )}
                                         >
@@ -368,7 +368,7 @@ export default function MiniWidget() {
                                         {!t.done && (
                                           <span
                                             className={clsx(
-                                              'block text-[9.5px] leading-tight',
+                                              'mt-0.5 block text-[10px] leading-tight',
                                               d.tone === 'over'
                                                 ? 'text-[#D62A20]'
                                                 : d.tone === 'today'
@@ -384,7 +384,7 @@ export default function MiniWidget() {
                                   )
                                 })}
                                 {r.todos.length > 5 && (
-                                  <li className="text-[9.5px] text-ink-4">…还有 {r.todos.length - 5} 项</li>
+                                  <li className="text-[10px] text-ink-4">…还有 {r.todos.length - 5} 项</li>
                                 )}
                               </ul>
                             )}
@@ -400,23 +400,23 @@ export default function MiniWidget() {
 
           {/* 今日 DDL 汇总 */}
           {hasDdlSection && (
-            <div className="mt-2.5 rounded-[14px] border border-line bg-surface-1 p-2.5">
-              <div className="mb-1.5 flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider text-ink-4">
-                <Icon name="flag" size={10} />
+            <div className="mt-3 rounded-[16px] bg-surface-1 p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-4">
+                <Icon name="flag" size={11} />
                 近期待办
               </div>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {upcoming.overdue.map((t) => (
-                  <li key={t.id} className="flex items-center gap-1.5 text-[11px]">
+                  <li key={t.id} className="flex items-center gap-2 text-[11.5px]">
                     <span className="h-1.5 w-1.5 flex-none rounded-full bg-[#FF3B30]" />
                     <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
-                    <span className="flex-none text-[9.5px] font-semibold text-[#D62A20]">已逾期</span>
+                    <span className="flex-none text-[10px] font-semibold text-[#D62A20]">已逾期</span>
                   </li>
                 ))}
                 {upcoming.soon.map((t) => {
                   const d = dueLabel(t.dueAt, now)
                   return (
-                    <li key={t.id} className="flex items-center gap-1.5 text-[11px]">
+                    <li key={t.id} className="flex items-center gap-2 text-[11.5px]">
                       <span
                         className={clsx(
                           'h-1.5 w-1.5 flex-none rounded-full',
@@ -426,7 +426,7 @@ export default function MiniWidget() {
                       <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
                       <span
                         className={clsx(
-                          'flex-none text-[9.5px]',
+                          'flex-none text-[10px]',
                           d.tone === 'today' ? 'text-[#C2740A]' : 'text-ink-4',
                         )}
                       >
@@ -440,7 +440,7 @@ export default function MiniWidget() {
           )}
 
           {next && (
-            <div className="mt-2 px-1 text-[10.5px] text-ink-4">
+            <div className="mt-2.5 px-1 text-[11px] text-ink-4">
               下一节：{next.course.name} · {pad2(Math.floor(next.startMin / 60))}:{pad2(next.startMin % 60)}
               {next.room ? ` · ${next.room}` : ''}
             </div>
@@ -449,12 +449,12 @@ export default function MiniWidget() {
         </div>
 
         {/* 底部 */}
-        <footer className="no-drag relative z-[1] flex flex-none items-center gap-2 border-t border-line px-3 py-2">
-          <span className="flex-1 text-[10.5px] text-ink-4">
+        <footer className="no-drag relative z-[1] flex flex-none items-center gap-2.5 border-t border-line px-3.5 py-2.5">
+          <span className="flex-1 text-[11px] text-ink-4">
             {openCount > 0 ? `${openCount} 项待办未完成` : '待办已清空 🎉'}
           </span>
-          <button className="btn btn-primary h-7 px-3 text-[11.5px]" onClick={() => void showMainWindow()}>
-            <Icon name="calendar" size={12} />
+          <button className="btn btn-primary h-8 px-3.5 text-[12px]" onClick={() => void showMainWindow()}>
+            <Icon name="calendar" size={13} />
             打开完整课表
           </button>
         </footer>

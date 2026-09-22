@@ -70,6 +70,10 @@
   --c-bg-top: #f7f9fd;
   --c-bg-bottom: #eef1f7;
 
+  --c-hero-from: #f3f6fc;
+  --c-hero-to: #e9eefb;
+  --c-hero-text: #0b1220;
+
   --c-field: rgba(15, 23, 42, 0.045);
   --c-field-focus: #fff;
   --c-seg-bg: rgba(120, 130, 150, 0.14);
@@ -99,12 +103,12 @@
   --c-surface-2: rgba(255, 255, 255, 0.1);
   --c-surface-3: rgba(255, 255, 255, 0.16);
 
-  --c-glass: rgba(33, 38, 50, 0.9);
-  --c-glass-thin: rgba(33, 38, 50, 0.72);
-  --c-glass-panel: rgba(26, 30, 39, 0.95);
-  --c-glass-panel-thin: rgba(26, 30, 39, 0.82);
-  --c-glass-border: rgba(255, 255, 255, 0.15);
-  --c-glass-border-thin: rgba(255, 255, 255, 0.1);
+  --c-glass: rgba(22, 26, 34, 0.72);
+  --c-glass-thin: rgba(22, 26, 34, 0.55);
+  --c-glass-panel: rgba(22, 26, 34, 0.96);
+  --c-glass-panel-thin: rgba(22, 26, 34, 0.84);
+  --c-glass-border: rgba(255, 255, 255, 0);
+  --c-glass-border-thin: rgba(255, 255, 255, 0);
   --glass-blur: 34px;
   --glass-sat: 170%;
 
@@ -114,6 +118,10 @@
   --c-bg-sheen-3: rgba(48, 176, 199, 0.14);
   --c-bg-top: #14181f;
   --c-bg-bottom: #0b0e13;
+
+  --c-hero-from: #1a1f29;
+  --c-hero-to: #141922;
+  --c-hero-text: #e8edf6;
 
   --c-field: rgba(255, 255, 255, 0.07);
   --c-field-focus: rgba(255, 255, 255, 0.12);
@@ -274,21 +282,15 @@ textarea {
   border: 1px solid var(--c-glass-border-thin);
 }
 
-/* 浮窗主卡片：更强模糊 + 顶部高光，暗色桌面上也能看清 */
+/* 浮窗主卡片：透出窗口本身的 Mica/亚克力材质，只有一层很淡的暗色膜 + 顶部高光 */
 .frost-card {
   background: var(--c-glass);
   backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
   -webkit-backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
-  border: 1px solid var(--c-glass-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    var(--sh-float);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
-[data-theme='dark'] .frost-card {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 0 1px rgba(0, 0, 0, 0.35),
-    var(--sh-float);
+[data-theme='light'] .frost-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .hairline {

@@ -12,8 +12,9 @@ import { SettingsPage } from './components/SettingsPage'
 import { ImportDialog, ImportDropOverlay } from './components/ImportDialog'
 import { Icon, Overlay, Segmented, ToastHost, springSoft } from './components/ui'
 import { MonthView, TermView } from './components/CalendarViews'
+import { AddCourseDialog, DraftTray } from './components/AddCourseDialog'
 import { TitleBar } from './components/TitleBar'
-import { initTheme, setTheme, type ThemeMode } from './lib/theme'
+import { setTheme, MAIN_THEME_KEY } from './lib/theme'
 import { colorOf } from './lib/palette'
 import { mondayOfWeek, pad2, weekIndexOf } from './lib/time'
 import { toast } from './lib/toast'
@@ -36,19 +37,25 @@ export default function App() {
   const selectedCourseId = useApp((s) => s.selectedCourseId)
   const selectCourse = useApp((s) => s.selectCourse)
   const addCourse = useApp((s) => s.addCourse)
+  const placeDraft = useApp((s) => s.placeDraft)
   const todos = useApp((s) => s.todos)
 
   const [importOpen, setImportOpen] = useState(false)
   const [jumpOpen, setJumpOpen] = useState(false)
   const [newCourse, setNewCourse] = useState<{ day: Weekday; start: number; end: number } | null>(null)
   const [calView, setCalView] = useState<CalView>('week')
-  const [, setThemeModeState] = useState<ThemeMode>(() => initTheme())
+  const [addCourseOpen, setAddCourseOpen] = useState(false)
+  const [trayDrag, setTrayDrag] = useState<{
+    courseId: string
+    sessionId: string
+    label: string
+    span: number
+  } | null>(null)
 
-  /** 主题跟随设置（设置页可改），并同步到 <html data-theme> */
-  const settingsTheme = settings.theme ?? 'system'
+  /** 主题：默认深色；设置页可改，改完立即写入并持久化 */
+  const settingsTheme = settings.theme ?? 'dark'
   useEffect(() => {
-    setTheme(settingsTheme)
-    setThemeModeState(settingsTheme)
+    setTheme(settingsTheme, MAIN_THEME_KEY)
   }, [settingsTheme])
 
   const openTodoCount = useMemo(() => todos.filter((t) => !t.done && !t.archived).length, [todos])
@@ -284,8 +291,12 @@ export default function App() {
 
             {/* 底部操作 */}
             <div className="mt-2 space-y-1.5">
-              <button className="btn btn-primary h-9 w-full text-[12.5px]" onClick={() => setImportOpen(true)}>
-                <Icon name="import" size={14} />
+              <button className="btn btn-primary h-9 w-full text-[12.5px]" onClick={() => setAddCourseOpen(true)}>
+                <Icon name="plus" size={14} />
+                添加课程
+              </button>
+              <button className="btn btn-ghost h-8 w-full text-[11.5px]" onClick={() => setImportOpen(true)}>
+                <Icon name="import" size={13} />
                 导入课表
               </button>
               <button className="btn btn-ghost h-8 w-full text-[11.5px]" onClick={() => setJumpOpen(true)}>
@@ -318,6 +329,19 @@ export default function App() {
                   )}
 
                   <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] p-3">
+                    {/* 未排课时段托盘 */}
+                    {calView === 'week' && (
+                      <DraftTray
+                        onOpenCourse={selectCourse}
+                        onDragStart={({ courseId, sessionId, label }) => {
+                          const c = courses.find((x) => x.id === courseId)
+                          const s = c?.sessions.find((x) => x.id === sessionId)
+                          const span = s ? Math.max(1, s.endPeriod - s.startPeriod + 1) : 1
+                          setTrayDrag({ courseId, sessionId, label, span })
+                        }}
+                      />
+                    )}
+
                     {/* 工具条 */}
                     <div className="flex flex-none items-center justify-between gap-3 pb-1.5">
                       <div className="flex items-center gap-2">
@@ -378,6 +402,18 @@ export default function App() {
                         showWeekend={settings.showWeekend}
                         onOpenCourse={selectCourse}
                         onAddAt={handleAddAt}
+                        incomingDraft={trayDrag}
+                        onDraftPlaced={(courseId, sessionId, day, startPeriod, endPeriod) => {
+                          placeDraft(courseId, sessionId, { day, startPeriod, endPeriod })
+                          setTrayDrag(null)
+                          toast('已排课', {
+                            desc: `周${'一二三四五六日'[day - 1]} 第 ${startPeriod}${
+                              endPeriod !== startPeriod ? `-${endPeriod}` : ''
+                            } 节`,
+                            tone: 'success',
+                            duration: 2600,
+                          })
+                        }}
                       />
                     )}
                     {calView === 'month' && (
@@ -506,6 +542,17 @@ export default function App() {
           setPreviewWeek(w === realWeek ? null : w)
           setJumpOpen(false)
           setView('timetable')
+        }}
+      />
+
+      <AddCourseDialog
+        open={addCourseOpen}
+        onClose={() => setAddCourseOpen(false)}
+        onCreated={(id) => {
+          setView('timetable')
+          setCalView('week')
+          // 不自动打开详情，让用户直接看到「未排课时段」托盘并拖放
+          void id
         }}
       />
 
