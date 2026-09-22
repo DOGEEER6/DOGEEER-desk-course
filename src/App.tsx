@@ -15,6 +15,7 @@ import { colorOf } from './lib/palette'
 import { mondayOfWeek, pad2, weekIndexOf } from './lib/time'
 import { toast } from './lib/toast'
 import { findCurrentClass } from './hooks'
+import { isDesktop, launchedAtStartup, showMainWindow } from './lib/desktop'
 
 export default function App() {
   const now = useNow(1000)
@@ -37,6 +38,22 @@ export default function App() {
   const realWeek = weekIndexOf(settings.semester.startDate, now)
   const week = previewWeek ?? realWeek
   const totalWeeks = settings.semester.totalWeeks
+
+  /* ---------------- 桌面端：首次运行显示主窗口，之后按开机自启状态决定 ---------------- */
+  useEffect(() => {
+    if (!isDesktop()) return
+    const KEY = 'lumen-desktop-initialized'
+    const initialized = localStorage.getItem(KEY) === '1'
+    void (async () => {
+      if (!initialized) {
+        localStorage.setItem(KEY, '1')
+        await showMainWindow()
+        return
+      }
+      const atStartup = await launchedAtStartup()
+      if (!atStartup) await showMainWindow()
+    })()
+  }, [])
 
   /* ---------------- 快捷键 ---------------- */
   useEffect(() => {

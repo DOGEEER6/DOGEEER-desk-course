@@ -20,5 +20,12 @@ export default defineConfig({
     target: 'chrome110',
     outDir: 'dist',
     chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      // 主窗口 + 桌面浮窗两个入口
+      input: {
+        main: 'index.html',
+        mini: 'mini.html',
+      },
+    },
   },
 })

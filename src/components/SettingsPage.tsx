@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '../store'
 import { DEFAULT_PERIODS } from '../lib/time'
@@ -7,6 +7,14 @@ import { Icon, Segmented, Switch } from './ui'
 import { toast } from '../lib/toast'
 import { ensurePermission, playChime, type PermissionState, isTauri } from '../lib/notify'
 import { currentWeek } from '../store'
+import {
+  getAutoStart,
+  hideMainWindow,
+  isDesktop,
+  setAutoStart,
+  setMiniAlwaysOnTop,
+  showMiniWindow,
+} from '../lib/desktop'
 
 export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const settings = useApp((s) => s.settings)
@@ -23,7 +31,14 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
 
   const [perm, setPerm] = useState<PermissionState | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
+  const [autoStart, setAutoStartState] = useState<boolean | null>(null)
+  const [miniOnTop, setMiniOnTopState] = useState(true)
   const week = currentWeek({ settings, previewWeek: null })
+
+  useEffect(() => {
+    if (!isDesktop()) return
+    void getAutoStart().then((v) => setAutoStartState(v ?? false))
+  }, [])
 
   const semesterProgress = useMemo(() => {
     const total = settings.semester.totalWeeks
@@ -156,6 +171,83 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
               当前运行在浏览器预览模式；打包为桌面应用后可发送系统级通知。
             </div>
           )}
+        </Card>
+
+        {/* 桌面浮窗 */}
+        <Card title="桌面浮窗" icon="pin" className="col-span-2">
+          <p className="-mt-1 mb-3 text-[11.5px] leading-5 text-ink-3">
+            浮窗常驻桌面，只显示<b>今天</b>的课程与作业 DDL：点击课程可展开查看详情，点右下角按钮打开完整课表。
+          </p>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <label className="flex items-center gap-3">
+              <Switch
+                checked={autoStart ?? false}
+                disabled={!isDesktop()}
+                onChange={async (v) => {
+                  const r = await setAutoStart(v)
+                  if (r == null) {
+                    toast('需要桌面版才能设置开机自启', { tone: 'warn' })
+                    return
+                  }
+                  setAutoStartState(v)
+                  toast(v ? '已开启开机自启' : '已关闭开机自启', {
+                    desc: v ? '下次开机只显示浮窗，点「打开完整课表」进入主界面' : undefined,
+                    tone: 'success',
+                  })
+                }}
+              />
+              <span>
+                <span className="block text-[12.5px] font-semibold">开机自启（只显示浮窗）</span>
+                <span className="text-[11px] text-ink-3">
+                  {isDesktop()
+                    ? autoStart == null
+                      ? '读取中…'
+                      : autoStart
+                        ? '已写入系统启动项'
+                        : '未开启'
+                    : '浏览器预览模式不可用'}
+                </span>
+              </span>
+            </label>
+
+            <label className="flex items-center gap-3">
+              <Switch
+                checked={miniOnTop}
+                disabled={!isDesktop()}
+                onChange={async (v) => {
+                  setMiniOnTopState(v)
+                  await setMiniAlwaysOnTop(v)
+                }}
+              />
+              <span>
+                <span className="block text-[12.5px] font-semibold">浮窗始终置顶</span>
+                <span className="text-[11px] text-ink-3">取消后可被其他窗口覆盖</span>
+              </span>
+            </label>
+
+            <div className="flex gap-2">
+              <button
+                className="btn btn-ghost h-8 px-3 text-[12px]"
+                onClick={async () => {
+                  const r = await showMiniWindow()
+                  if (r == null) toast('浏览器预览下没有浮窗', { tone: 'info' })
+                }}
+              >
+                <Icon name="pin" size={13} />
+                显示浮窗
+              </button>
+              <button
+                className="btn btn-ghost h-8 px-3 text-[12px]"
+                onClick={async () => {
+                  const r = await hideMainWindow()
+                  if (r == null) toast('浏览器预览下无法隐藏窗口', { tone: 'info' })
+                }}
+              >
+                <Icon name="list" size={13} />
+                收起为浮窗
+              </button>
+            </div>
+          </div>
         </Card>
 
         {/* 节次时间 */}
@@ -385,7 +477,7 @@ function Card({
   className,
 }: {
   title: string
-  icon: 'calendar' | 'bell' | 'clock' | 'import' | 'sparkle'
+  icon: 'calendar' | 'bell' | 'clock' | 'import' | 'sparkle' | 'pin'
   children: React.ReactNode
   className?: string
 }) {
