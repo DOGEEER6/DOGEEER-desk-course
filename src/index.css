@@ -276,15 +276,23 @@ textarea {
   transition:
     box-shadow 0.22s ease,
     border-color 0.22s ease,
-    filter 0.22s ease;
+    filter 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .tt-card:hover {
   filter: brightness(1.015);
   box-shadow: 0 8px 22px -12px rgba(15, 23, 42, 0.5);
+  transform: translateY(-1px);
+}
+.tt-card:active {
+  transform: scale(0.985);
 }
 .tt-card[data-dragging='true'] {
   box-shadow: var(--shadow-float);
   z-index: 40;
+  /* 注意：拖动位移由内联 transform 控制，这里不要再写 transform 以免覆盖 */
+  filter: brightness(1.03);
+  transition: none;
 }
 .tt-card[data-dim='true'] {
   opacity: 0.32;
