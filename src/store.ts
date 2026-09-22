@@ -109,6 +109,12 @@ interface AppState {
   }) => void
   setImportReport: (r: ImportReport) => void
   resetAll: () => void
+
+  /* ---- 弹窗状态（浮窗也要能唤起编辑，所以放 store） ---- */
+  /** open=true 且无 todoId 表示新建；有 todoId 表示编辑 */
+  todoDialog: { open: boolean; todoId?: string }
+  openTodoDialog: (todoId?: string) => void
+  closeTodoDialog: () => void
 }
 
 function normalizeSession(s: SessionInput): Session {
@@ -379,6 +385,10 @@ export const useApp = create<AppState>()(
 
       setImportReport: (r) => set({ lastImport: r }),
 
+      todoDialog: { open: false },
+      openTodoDialog: (todoId) => set({ todoDialog: { open: true, todoId } }),
+      closeTodoDialog: () => set({ todoDialog: { open: false } }),
+
       resetAll: () =>
         set({
           courses: [],
@@ -416,3 +426,25 @@ export function dateOfWeekDay(startDate: string, week: number, day: Weekday): Da
 }
 
 export type { AppState }
+
+
+/* ------------------------------------------------------------------ */
+/* 跨窗口数据同步                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 重新从 localStorage 读取持久化状态。
+ *
+ * 主窗口与浮窗是两个 WebView，各自有独立的 zustand 实例：
+ * 主窗口写 localStorage 时，浮窗的内存状态不会自动更新
+ * （所以之前"改了待办，浮窗没反应"）。浮窗需要在 storage 事件 /
+ * 获得焦点 / 定时轮询时调用它把数据拉过来。
+ */
+export function rehydrateFromStorage(): void {
+  try {
+    const api = useApp as unknown as { persist?: { rehydrate?: () => Promise<void> | void } }
+    if (api.persist?.rehydrate) void api.persist.rehydrate()
+  } catch {
+    /* ignore */
+  }
+}

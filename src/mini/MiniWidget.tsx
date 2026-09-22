@@ -19,6 +19,7 @@ import { useNow } from '../hooks'
 import {
   hideCurrentWindow,
   isDesktop,
+  openMainTodoDialog,
   miniWorkAreaHeight,
   requestInitialSnap,
   setMiniClickThrough,
@@ -28,6 +29,7 @@ import {
 } from '../lib/desktop'
 import { playChime } from '../lib/notify'
 import { applyTheme, MINI_THEME_KEY } from '../lib/theme'
+import { rehydrateFromStorage } from '../store'
 
 /* ---------------- 窗口位置/大小持久化 ---------------- */
 
@@ -263,6 +265,25 @@ export default function MiniWidget() {
     if (!isDesktop()) return
     void setMiniClickThrough(!!miniPinned)
   }, [miniPinned])
+
+  /* 跨窗口数据同步：主窗口改了待办/课程，浮窗要把数据拉过来。
+     两个 WebView 各有独立 store，光靠 localStorage 写入不会自动更新内存状态。 */
+  useEffect(() => {
+    const pull = () => rehydrateFromStorage()
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === 'lumen-course-v1') pull()
+    }
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('focus', pull)
+    document.addEventListener('visibilitychange', pull)
+    const timer = window.setInterval(pull, 2500)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', pull)
+      document.removeEventListener('visibilitychange', pull)
+      window.clearInterval(timer)
+    }
+  }, [])
 
   /* 主界面切换深浅色时同步（跨窗口用 storage 事件 + 重新聚焦时兜底） */
   useEffect(() => {
@@ -590,7 +611,20 @@ export default function MiniWidget() {
                                             {d.text}
                                           </span>
                                         )}
+                                        {t.notes && (
+                                          <span className="mt-1 block whitespace-pre-wrap break-words rounded-md bg-surface-2 px-1.5 py-1 text-[11px] leading-snug text-ink-2">
+                                            {t.notes}
+                                          </span>
+                                        )}
                                       </span>
+                                      <button
+                                        className="no-drag grid h-[20px] w-[20px] flex-none place-items-center rounded-md text-ink-4 transition-colors hover:bg-surface-2 hover:text-[#0A84FF]"
+                                        title="编辑这条作业（内容 / 日期 / DDL / 备注）"
+                                        onClick={() => void openMainTodoDialog(t.id)}
+                                        aria-label="编辑"
+                                      >
+                                        <Icon name="note" size={12} />
+                                      </button>
                                     </li>
                                   )
                                 })}
@@ -641,7 +675,22 @@ export default function MiniWidget() {
                         <path d="M2 6.4l2.6 2.6L10 3.4" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                       </motion.svg>
                     </button>
-                    <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{t.title}</span>
+                      {t.notes && (
+                        <span className="mt-0.5 block whitespace-pre-wrap break-words text-[10.5px] leading-snug text-ink-3">
+                          {t.notes}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      className="no-drag grid h-[18px] w-[18px] flex-none place-items-center rounded-md text-ink-4 hover:bg-surface-2 hover:text-[#0A84FF]"
+                      title="编辑"
+                      onClick={() => void openMainTodoDialog(t.id)}
+                      aria-label="编辑"
+                    >
+                      <Icon name="note" size={11} />
+                    </button>
                     <span className="flex-none text-[11px] font-semibold text-[#D62A20]">已逾期</span>
                   </li>
                 ))}
@@ -671,7 +720,22 @@ export default function MiniWidget() {
                           <path d="M2 6.4l2.6 2.6L10 3.4" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                         </motion.svg>
                       </button>
-                      <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{t.title}</span>
+                        {t.notes && (
+                          <span className="mt-0.5 block whitespace-pre-wrap break-words text-[10.5px] leading-snug text-ink-3">
+                            {t.notes}
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        className="no-drag grid h-[18px] w-[18px] flex-none place-items-center rounded-md text-ink-4 hover:bg-surface-2 hover:text-[#0A84FF]"
+                        title="编辑"
+                        onClick={() => void openMainTodoDialog(t.id)}
+                        aria-label="编辑"
+                      >
+                        <Icon name="note" size={11} />
+                      </button>
                       <span
                         className={clsx(
                           'flex-none text-[11px]',

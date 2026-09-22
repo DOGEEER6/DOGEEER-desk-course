@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WebviewWindow,
+    Emitter, Manager, WebviewWindow,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
@@ -226,6 +226,20 @@ fn request_initial_snap(app: tauri::AppHandle, first_run: bool, height: f64) {
     schedule_initial_snap(app, first_run, height);
 }
 
+/// 让主窗口打开待办编辑弹窗（浮窗调用）
+#[tauri::command]
+fn open_main_todo_dialog(app: tauri::AppHandle, todo_id: Option<String>) -> Result<(), String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    main.show().map_err(|e| e.to_string())?;
+    main.unminimize().ok();
+    main.set_focus().map_err(|e| e.to_string())?;
+    let payload = serde_json::json!({ "todoId": todo_id }).to_string();
+    main.emit("lumen://edit-todo", payload).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// 开机自启开关
 #[tauri::command]
 fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
@@ -380,6 +394,7 @@ pub fn run() {
             set_mini_click_through,
             snap_mini_top_right,
             request_initial_snap,
+            open_main_todo_dialog,
             mini_work_area_height,
             set_autostart,
             get_autostart,

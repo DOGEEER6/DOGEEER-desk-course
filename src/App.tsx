@@ -39,6 +39,7 @@ export default function App() {
   const selectCourse = useApp((s) => s.selectCourse)
   const addCourse = useApp((s) => s.addCourse)
   const placeDraft = useApp((s) => s.placeDraft)
+  const openTodoDialog = useApp((s) => s.openTodoDialog)
   const todos = useApp((s) => s.todos)
 
   const [importOpen, setImportOpen] = useState(false)
@@ -46,7 +47,6 @@ export default function App() {
   const [newCourse, setNewCourse] = useState<{ day: Weekday; start: number; end: number } | null>(null)
   const [calView, setCalView] = useState<CalView>('week')
   const [todoCollapsed, setTodoCollapsed] = useState(true)
-  const [todoDialogOpen, setTodoDialogOpen] = useState(false)
   const [addCourseOpen, setAddCourseOpen] = useState(false)
   const [trayDrag, setTrayDrag] = useState<{
     courseId: string
@@ -109,6 +109,35 @@ export default function App() {
       if (!atStartup) await showMainWindow()
     })()
   }, [])
+
+  /* ---------------- 浮窗请求编辑待办 ---------------- */
+  useEffect(() => {
+    if (!isDesktop()) return
+    let unlisten: (() => void) | undefined
+    let cancelled = false
+    void (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        const fn = await listen<string>('lumen://edit-todo', (ev) => {
+          let id: string | undefined
+          try {
+            id = (JSON.parse(ev.payload) as { todoId?: string | null }).todoId ?? undefined
+          } catch {
+            id = undefined
+          }
+          openTodoDialog(id)
+        })
+        if (cancelled) fn()
+        else unlisten = fn
+      } catch {
+        /* 浏览器预览没有事件系统 */
+      }
+    })()
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [openTodoDialog])
 
   /* ---------------- 快捷键 ---------------- */
   useEffect(() => {
@@ -348,7 +377,6 @@ export default function App() {
                           compact
                           collapsed={todoCollapsed}
                           onToggleCollapse={() => setTodoCollapsed((v) => !v)}
-                          onAddClick={() => setTodoDialogOpen(true)}
                         />
                       </div>
                     </div>
@@ -496,7 +524,7 @@ export default function App() {
                   <TodayList now={now} onOpenCourse={selectCourse} />
                 </div>
                 <div className="glass flex w-[420px] flex-none flex-col rounded-[24px] p-5">
-                  <TodoPanel compact onAddClick={() => setTodoDialogOpen(true)} />
+                  <TodoPanel compact />
                 </div>
               </motion.div>
             )}
@@ -511,7 +539,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={springSoft}
               >
-                <TodoPanel onAddClick={() => setTodoDialogOpen(true)} />
+                <TodoPanel />
               </motion.div>
             )}
 
@@ -577,7 +605,7 @@ export default function App() {
         }}
       />
 
-      <TodoDialog open={todoDialogOpen} onClose={() => setTodoDialogOpen(false)} />
+      <TodoDialog />
 
       <AddCourseDialog
         open={addCourseOpen}

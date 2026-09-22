@@ -115,12 +115,10 @@ export function TodoPanel({
   compact = false,
   collapsed: collapsedProp,
   onToggleCollapse,
-  onAddClick,
 }: {
   compact?: boolean
   collapsed?: boolean
   onToggleCollapse?: () => void
-  onAddClick?: () => void
 }) {
   const todos = useApp((s) => s.todos)
   const courses = useApp((s) => s.courses)
@@ -131,6 +129,7 @@ export function TodoPanel({
   const archiveTodo = useApp((s) => s.archiveTodo)
   const restoreTodo = useApp((s) => s.restoreTodo)
   const clearArchived = useApp((s) => s.clearArchived)
+  const openTodoDialog = useApp((s) => s.openTodoDialog)
 
   const [filter, setFilter] = useState<FilterKey>('open')
   const [editing, setEditing] = useState<string | null>(null)
@@ -143,11 +142,11 @@ export function TodoPanel({
     const onFocus = () => {
       // Ctrl+K：折叠时先展开，再打开添加弹窗
       if (collapsed) toggleCollapse()
-      window.setTimeout(() => onAddClick?.(), 60)
+      window.setTimeout(() => openTodoDialog(), 60)
     }
     window.addEventListener('lumen:focus-todo', onFocus)
     return () => window.removeEventListener('lumen:focus-todo', onFocus)
-  }, [collapsed, toggleCollapse, onAddClick])
+  }, [collapsed, toggleCollapse, openTodoDialog])
 
   const now = new Date()
 
@@ -305,7 +304,7 @@ export function TodoPanel({
         <div className="mt-2.5 flex items-center gap-2">
           <button
             className="btn btn-primary h-9 flex-1 text-[12.5px]"
-            onClick={() => onAddClick?.()}
+            onClick={() => openTodoDialog()}
             data-testid="todo-add"
           >
             <Icon name="plus" size={14} />
@@ -466,12 +465,27 @@ export function TodoPanel({
                         </span>
                       )}
                     </div>
+
+                    {/* 备注详情：直接显示在卡片上，不用再点进去 */}
+                    {t.notes && (
+                      <div className="mt-1.5 whitespace-pre-wrap break-words rounded-lg bg-surface-1 px-2 py-1.5 text-[11.5px] leading-[1.5] text-ink-2">
+                        {t.notes}
+                      </div>
+                    )}
                   </div>
 
                   {/* 行内操作 */}
                   <div className="flex flex-none items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                     {!isArchived && (
                       <>
+                        <button
+                          className="btn h-7 w-7 text-ink-4 hover:bg-surface-2 hover:text-[#0A84FF]"
+                          title="编辑（内容 / 日期 / DDL / 备注）"
+                          data-testid={`todo-edit-${t.id}`}
+                          onClick={() => openTodoDialog(t.id)}
+                        >
+                          <Icon name="note" size={13} />
+                        </button>
                         <label
                           className="btn h-7 w-7 cursor-pointer text-ink-4 hover:bg-surface-2 hover:text-[#0A84FF]"
                           title="设置 / 修改 DDL"

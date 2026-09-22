@@ -428,6 +428,15 @@ await evaluate(`
   return 'ok';
 `)
 await new Promise((r) => setTimeout(r, 300))
+// 填备注，验证备注能显示在卡片上
+await evaluate(`
+  const ta = document.querySelector('[data-testid="todo-notes"]');
+  if (!ta) return 'no-notes';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+  setter.call(ta, '第 3 章课后题 1-8，附仿真波形图');
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  return 'ok';
+`)
 await evaluate(`
   Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '添加')?.click();
   return 'ok';
@@ -435,11 +444,42 @@ await evaluate(`
 await new Promise((r) => setTimeout(r, 1400))
 const afterAdd = await evaluate(`return document.body.innerText`)
 check('弹窗添加待办成功', /操作系统实验报告/.test(afterAdd))
+check('备注显示在待办卡片上', /附仿真波形图/.test(afterAdd))
+
+// 二次编辑：改标题与备注
+const editId = await evaluate(`
+  const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+  return (s.state.todos.find(t => t.title === '操作系统实验报告') || {}).id || '';
+`)
+check('能定位到刚建的待办', !!editId, String(editId))
+await evaluate(`document.querySelector('[data-testid="todo-edit-${editId}"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 900))
+check('可打开编辑弹窗', /编辑待办 \/ 作业/.test(await evaluate(`return document.body.innerText`)))
+check(
+  '编辑弹窗回填了备注',
+  await evaluate(`return (document.querySelector('[data-testid="todo-notes"]')?.value || '').includes('仿真波形图')`),
+)
+await evaluate(`
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  const ti = document.querySelector('[data-testid="todo-title"]');
+  setter.call(ti, '操作系统实验报告（修订版）');
+  ti.dispatchEvent(new Event('input', { bubbles: true }));
+  return 'ok';
+`)
+await evaluate(`document.querySelector('[data-testid="todo-save"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 1400))
+check(
+  '二次修改已保存',
+  await evaluate(`
+    const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+    return s.state.todos.some(t => t.title === '操作系统实验报告（修订版）');
+  `),
+)
 check(
   '待办带上了 DDL',
   await evaluate(`
     const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
-    const t = s.state.todos.find(x => x.title === '操作系统实验报告');
+    const t = s.state.todos.find(x => x.title.includes('操作系统实验报告'));
     return !!t && !!t.dueAt;
   `),
 )

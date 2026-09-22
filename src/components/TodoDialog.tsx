@@ -4,9 +4,9 @@ import type { TodoPriority } from '../types'
 import { colorOf } from '../lib/palette'
 import { Icon, Overlay } from './ui'
 import { toast } from '../lib/toast'
-import { dateKey, pad2, parseDateKey } from '../lib/time'
+import { pad2, parseDateKey, dateKey } from '../lib/time'
 
-/** 把 Date 转成 <input type="datetime-local"> 需要的值 */
+/** Date → <input type="datetime-local"> 的值 */
 function toLocal(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
@@ -18,37 +18,49 @@ function todayLocal(hour = 18): string {
 }
 
 /**
- * 添加待办 / 作业：表单式设置标题、关联课程、排期时间、DDL、优先级、备注。
- * 不再需要用 `!high` 这类命令式语法。
+ * 待办 / 作业的**新建与编辑**共用同一个选项卡。
+ * 由 store 的 todoDialog 控制打开（浮窗也能唤起）。
  */
-export function TodoDialog({
-  open,
-  onClose,
-  presetCourseId,
-}: {
-  open: boolean
-  onClose: () => void
-  presetCourseId?: string
-}) {
+export function TodoDialog({ presetCourseId }: { presetCourseId?: string }) {
+  const dialog = useApp((s) => s.todoDialog)
+  const close = useApp((s) => s.closeTodoDialog)
   const courses = useApp((s) => s.courses)
+  const todos = useApp((s) => s.todos)
   const addTodo = useApp((s) => s.addTodo)
+  const updateTodo = useApp((s) => s.updateTodo)
+  const removeTodo = useApp((s) => s.removeTodo)
+
+  const editing = dialog.open && dialog.todoId ? todos.find((t) => t.id === dialog.todoId) : undefined
+  const open = dialog.open
 
   const [title, setTitle] = useState('')
-  const [courseId, setCourseId] = useState<string>('')
+  const [courseId, setCourseId] = useState('')
   const [priority, setPriority] = useState<TodoPriority>('normal')
   const [startAt, setStartAt] = useState('')
-  const [dueAt, setDueAt] = useState(todayLocal(18))
+  const [dueAt, setDueAt] = useState('')
   const [notes, setNotes] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
+  /* 每次打开都按当前是「新建」还是「编辑」填充表单 */
   useEffect(() => {
     if (!open) return
-    setTitle('')
-    setCourseId(presetCourseId ?? '')
-    setPriority('normal')
-    setStartAt('')
-    setDueAt(todayLocal(18))
-    setNotes('')
-  }, [open, presetCourseId])
+    setConfirmDelete(false)
+    if (editing) {
+      setTitle(editing.title)
+      setCourseId(editing.courseId ?? '')
+      setPriority(editing.priority)
+      setStartAt(editing.startAt ? toLocal(new Date(editing.startAt)) : '')
+      setDueAt(editing.dueAt ? toLocal(new Date(editing.dueAt)) : '')
+      setNotes(editing.notes ?? '')
+    } else {
+      setTitle('')
+      setCourseId(presetCourseId ?? '')
+      setPriority('normal')
+      setStartAt('')
+      setDueAt(todayLocal(18))
+      setNotes('')
+    }
+  }, [open, editing?.id, presetCourseId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = () => {
     const t = title.trim()
@@ -56,37 +68,50 @@ export function TodoDialog({
       toast('请填写待办内容', { tone: 'warn' })
       return
     }
-    addTodo({
+    const payload = {
       title: t,
       courseId: courseId || undefined,
       priority,
       startAt: startAt ? new Date(startAt).toISOString() : undefined,
       dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
       notes: notes.trim() || undefined,
-    })
-    toast('已加入待办', {
-      desc: dueAt ? `截止 ${new Date(dueAt).getMonth() + 1}月${new Date(dueAt).getDate()}日 ${pad2(new Date(dueAt).getHours())}:${pad2(new Date(dueAt).getMinutes())}` : undefined,
-      tone: 'success',
-      duration: 2800,
-    })
-    onClose()
+      notified: false,
+    }
+    if (editing) {
+      updateTodo(editing.id, payload)
+      toast('已保存修改', { desc: t, tone: 'success', duration: 2400 })
+    } else {
+      addTodo(payload)
+      toast('已加入待办', {
+        desc: dueAt
+          ? `截止 ${new Date(dueAt).getMonth() + 1}月${new Date(dueAt).getDate()}日 ${pad2(new Date(dueAt).getHours())}:${pad2(new Date(dueAt).getMinutes())}`
+          : undefined,
+        tone: 'success',
+        duration: 2800,
+      })
+    }
+    close()
   }
 
   if (!open) return null
 
   return (
-    <Overlay open onClose={onClose} align="center">
-      <div className="w-[560px] max-w-[94vw] overflow-hidden rounded-[26px] border border-glass-line bg-glass shadow-[var(--sh-float)] backdrop-blur-2xl">
+    <Overlay open onClose={close} align="center">
+      <div className="w-[560px] max-w-[94vw] overflow-hidden rounded-[26px] border border-glass-line bg-glass shadow-[var(--shadow-float)] backdrop-blur-2xl">
         {/* 头部 */}
         <div className="flex items-center gap-3 border-b border-line px-5 py-3.5">
           <div className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white">
-            <Icon name="plus" size={17} />
+            <Icon name={editing ? 'note' : 'plus'} size={17} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[15.5px] font-bold tracking-[-0.02em]">添加待办 / 作业</h3>
-            <p className="text-[11.5px] text-ink-3">设置内容、排期与 DDL，都会同步到浮窗</p>
+            <h3 className="text-[15.5px] font-bold tracking-[-0.02em]">
+              {editing ? '编辑待办 / 作业' : '添加待办 / 作业'}
+            </h3>
+            <p className="text-[11.5px] text-ink-3">
+              {editing ? '改完点保存，浮窗会同步更新' : '设置内容、排期与 DDL，都会同步到浮窗'}
+            </p>
           </div>
-          <button className="btn h-8 w-8 bg-surface-2 text-ink-2" onClick={onClose} aria-label="关闭">
+          <button className="btn h-8 w-8 bg-surface-2 text-ink-2" onClick={close} aria-label="关闭">
             <Icon name="close" size={15} />
           </button>
         </div>
@@ -105,6 +130,7 @@ export function TodoDialog({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submit()
               }}
+              data-testid="todo-title"
             />
           </label>
 
@@ -136,7 +162,14 @@ export function TodoDialog({
                     key={k}
                     className="flex-1 rounded-xl py-2 text-[12px] font-semibold transition-colors"
                     style={{
-                      background: priority === k ? (k === 'high' ? '#FF3B30' : k === 'low' ? 'var(--c-surface-3)' : '#0A84FF') : 'var(--c-surface-1)',
+                      background:
+                        priority === k
+                          ? k === 'high'
+                            ? '#FF3B30'
+                            : k === 'low'
+                              ? 'var(--c-surface-3)'
+                              : '#0A84FF'
+                          : 'var(--c-surface-1)',
                       color: priority === k ? (k === 'low' ? 'var(--color-ink-2)' : '#fff') : 'var(--color-ink-3)',
                     }}
                     onClick={() => setPriority(k)}
@@ -160,7 +193,13 @@ export function TodoDialog({
             </label>
             <label className="block">
               <span className="mb-1 block text-[11.5px] font-semibold text-ink-3">截止时间 DDL</span>
-              <input type="datetime-local" className="field" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+              <input
+                type="datetime-local"
+                className="field"
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+                data-testid="todo-due"
+              />
             </label>
           </div>
 
@@ -192,12 +231,13 @@ export function TodoDialog({
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-[11.5px] font-semibold text-ink-3">备注</span>
+            <span className="mb-1 block text-[11.5px] font-semibold text-ink-3">备注详情</span>
             <textarea
-              className="field min-h-[64px] resize-none"
-              placeholder="选填：要求、提交方式、参考资料…"
+              className="field min-h-[72px] resize-none"
+              placeholder="选填：要求、提交方式、参考资料…（会显示在待办卡片与浮窗里）"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              data-testid="todo-notes"
             />
           </label>
 
@@ -214,15 +254,51 @@ export function TodoDialog({
 
         {/* 底部 */}
         <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3.5">
-          <span className="text-[11.5px] text-ink-4">
-            {dueAt ? `DDL ${dateKey(parseDateKey(dueAt.slice(0, 10)))} ${dueAt.slice(11, 16)}` : '未设置 DDL'}
-          </span>
+          {editing ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[11.5px] text-ink-2">确定删除？</span>
+                <button
+                  className="btn h-8 px-3 text-[12px] text-white"
+                  style={{ background: '#FF3B30' }}
+                  onClick={() => {
+                    removeTodo(editing.id)
+                    close()
+                    toast('已删除', { tone: 'info', duration: 2400 })
+                  }}
+                >
+                  删除
+                </button>
+                <button className="btn btn-ghost h-8 px-3 text-[12px]" onClick={() => setConfirmDelete(false)}>
+                  取消
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn h-8 px-3 text-[12px] text-[#D62A20] hover:bg-[#FF3B30]/10"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Icon name="trash" size={13} />
+                删除这条
+              </button>
+            )
+          ) : (
+            <span className="text-[11.5px] text-ink-4">
+              {dueAt ? `DDL ${dateKey(parseDateKey(dueAt.slice(0, 10)))} ${dueAt.slice(11, 16)}` : '未设置 DDL'}
+            </span>
+          )}
+
           <div className="flex gap-2">
-            <button className="btn btn-ghost h-9 px-4 text-[12.5px]" onClick={onClose}>
+            <button className="btn btn-ghost h-9 px-4 text-[12.5px]" onClick={close}>
               取消
             </button>
-            <button className="btn btn-primary h-9 px-5 text-[12.5px] disabled:opacity-40" disabled={!title.trim()} onClick={submit}>
-              添加
+            <button
+              className="btn btn-primary h-9 px-5 text-[12.5px] disabled:opacity-40"
+              disabled={!title.trim()}
+              onClick={submit}
+              data-testid="todo-save"
+            >
+              {editing ? '保存修改' : '添加'}
             </button>
           </div>
         </div>

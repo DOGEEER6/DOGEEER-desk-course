@@ -165,6 +165,12 @@ export async function resetMiniToTopRight(height: number): Promise<boolean> {
 export const setTrayVisible = (visible: boolean) => call<void>('set_tray_visible', { visible })
 export const getTrayVisible = () => call<boolean>('get_tray_visible')
 
+/** 让主窗口打开待办编辑弹窗（浮窗用） */
+export async function openMainTodoDialog(todoId?: string): Promise<boolean> {
+  const r = await call<void>('open_main_todo_dialog', { todoId: todoId ?? null })
+  return r != null
+}
+
 /** 开机自启 */
 export const setAutoStart = (enabled: boolean) => call<boolean>('set_autostart', { enabled })
 export const getAutoStart = () => call<boolean>('get_autostart')
