@@ -11,7 +11,7 @@ import { CourseDrawer } from './components/CourseDrawer'
 import { SettingsPage } from './components/SettingsPage'
 import { ImportDialog, ImportDropOverlay } from './components/ImportDialog'
 import { Icon, Overlay, Segmented, ToastHost, springSoft } from './components/ui'
-import { MonthView, TermView } from './components/CalendarViews'
+import { TermView } from './components/CalendarViews'
 import { AddCourseDialog, DraftTray } from './components/AddCourseDialog'
 import { TodoDialog } from './components/TodoDialog'
 import { TitleBar } from './components/TitleBar'
@@ -23,7 +23,7 @@ import { findCurrentClass } from './hooks'
 import { isDesktop, launchedAtStartup, setAutoStart, showMainWindow } from './lib/desktop'
 import { parseTimetableFile } from './lib/excel'
 
-type CalView = 'week' | 'month' | 'term'
+type CalView = 'week' | 'term'
 
 export default function App() {
   const now = useNow(1000)
@@ -415,7 +415,6 @@ export default function App() {
                           onChange={setCalView}
                           options={[
                             { value: 'week', label: '周视图' },
-                            { value: 'month', label: '月视图' },
                             { value: 'term', label: '学期视图' },
                           ]}
                         />
@@ -440,13 +439,6 @@ export default function App() {
                             duration: 2600,
                           })
                         }}
-                      />
-                    )}
-                    {calView === 'month' && (
-                      <MonthView
-                        week={Math.max(1, week)}
-                        showWeekend={settings.showWeekend}
-                        onOpenCourse={selectCourse}
                       />
                     )}
                     {calView === 'term' && (

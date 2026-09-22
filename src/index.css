@@ -58,7 +58,10 @@
   --c-glass-thin: rgba(255, 255, 255, 0.66);
   --c-glass-panel: rgba(255, 255, 255, 0.94);
   --c-glass-panel-thin: rgba(255, 255, 255, 0.82);
-  --c-pane: rgba(255, 255, 255, 0.42);
+  --c-pane: rgba(255, 255, 255, 0.34);
+  --c-panel: rgba(255, 255, 255, 0.5);
+  --c-panel-strong: rgba(255, 255, 255, 0.62);
+  --c-panel-line: rgba(255, 255, 255, 0.6);
   --c-glass-border: rgba(255, 255, 255, 0.72);
   --c-glass-border-thin: rgba(255, 255, 255, 0.58);
   --glass-blur: 30px;
@@ -108,7 +111,10 @@
   --c-glass-thin: rgba(22, 26, 34, 0.55);
   --c-glass-panel: rgba(22, 26, 34, 0.96);
   --c-glass-panel-thin: rgba(22, 26, 34, 0.84);
-  --c-pane: rgba(14, 17, 23, 0.42);
+  --c-pane: rgba(12, 15, 20, 0.34);
+  --c-panel: rgba(14, 17, 23, 0.72);
+  --c-panel-strong: rgba(12, 15, 20, 0.86);
+  --c-panel-line: rgba(255, 255, 255, 0.08);
   --c-glass-border: rgba(255, 255, 255, 0);
   --c-glass-border-thin: rgba(255, 255, 255, 0);
   --glass-blur: 34px;
@@ -286,6 +292,31 @@ textarea {
 }
 
 /* 娴獥涓诲崱鐗囷細閫忓嚭绐楀彛鏈韩鐨?Mica/浜氬厠鍔涙潗璐紝鍙湁涓€灞傚緢娣＄殑鏆楄壊鑶?+ 椤堕儴楂樺厜 */
+/* 浮窗内的信息面板 / 头部 / 底栏：
+   在通透卡片上再叠一层局部模糊，否则复杂桌面背景下文字看不清 */
+.mini-panel {
+  background: var(--c-panel);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid var(--c-panel-line);
+}
+[data-theme='light'] .mini-panel {
+  background: rgba(255, 255, 255, 0.52);
+  border-color: rgba(255, 255, 255, 0.68);
+}
+
+.mini-panel-header {
+  background: linear-gradient(180deg, var(--c-panel-strong), transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  mask-image: linear-gradient(180deg, #000 62%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent);
+}
+
+.mini-panel-footer {
+  background: var(--c-panel-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-top: 1px solid var(--c-panel-line);
+}
+
 .frost-card {
   background: var(--c-pane);
   backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));

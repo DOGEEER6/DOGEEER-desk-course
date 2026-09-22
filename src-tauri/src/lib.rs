@@ -11,6 +11,8 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 /// 浮窗是否「固定」（置顶 + 不可拖动）
 static MINI_LOCKED: Mutex<bool> = Mutex::new(false);
+/// 固定后是否鼠标穿透
+static MINI_CLICK_THROUGH: Mutex<bool> = Mutex::new(false);
 /// 托盘图标是否可见
 static TRAY_VISIBLE: Mutex<bool> = Mutex::new(true);
 
@@ -102,7 +104,7 @@ fn set_mini_always_on_top(app: tauri::AppHandle, on_top: bool) -> Result<(), Str
     Ok(())
 }
 
-/// 固定 / 解除固定：固定后浮窗停在原地，不能拖动也不能改大小
+/// 固定 / 解除固定：固定后浮窗停在原地、鼠标穿透，不能拖动也不能改大小
 #[tauri::command]
 fn set_mini_locked(app: tauri::AppHandle, locked: bool) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("mini") {
@@ -113,6 +115,115 @@ fn set_mini_locked(app: tauri::AppHandle, locked: bool) -> Result<(), String> {
         *guard = locked;
     }
     Ok(())
+}
+
+/// 固定后让鼠标穿透到桌面（点浮窗等于点桌面）
+#[tauri::command]
+fn set_mini_click_through(app: tauri::AppHandle, through: bool) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("mini") {
+        win.set_ignore_cursor_events(through).map_err(|e| e.to_string())?;
+    }
+    if let Ok(mut guard) = MINI_CLICK_THROUGH.lock() {
+        *guard = through;
+    }
+    Ok(())
+}
+
+/// 把浮窗贴到（当前显示器）工作区右上角。
+///
+/// 位置必须在 Rust 侧算：前端 `set_position` 的单位混乱（实测传物理像素会被
+/// 再缩放一次，导致窗口被夹回屏幕内），这里直接拿 monitor.work_area() 的物理像素，
+/// 用 `PhysicalPosition` 定位，最可靠。
+#[tauri::command]
+fn snap_mini_top_right(app: tauri::AppHandle, width: f64, height: f64, gap: f64) -> Result<(), String> {
+    let win = app
+        .get_webview_window("mini")
+        .ok_or_else(|| "mini window not found".to_string())?;
+
+    // 尺寸用逻辑像素
+    let _ = win.set_size(tauri::LogicalSize::new(width, height));
+
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let monitor = win
+        .current_monitor()
+        .map_err(|e| e.to_string())?
+        .or_else(|| win.primary_monitor().ok().flatten());
+
+    if let Some(m) = monitor {
+        let wa = m.work_area();
+        let w_px = width * scale;
+        let gap_px = gap * scale;
+        let x = wa.position.x as f64 + wa.size.width as f64 - w_px - gap_px;
+        let y = wa.position.y as f64 + gap_px;
+        win.set_position(tauri::PhysicalPosition::new(x.round() as i32, y.round() as i32))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// 浮窗当前所在显示器的工作区尺寸（逻辑像素），用于限制内容高度
+#[tauri::command]
+fn mini_work_area_height(app: tauri::AppHandle) -> f64 {
+    let Some(win) = app.get_webview_window("mini") else {
+        return 900.0;
+    };
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let monitor = win
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| win.primary_monitor().ok().flatten());
+    match monitor {
+        Some(m) => m.work_area().size.height as f64 / scale,
+        None => 900.0,
+    }
+}
+
+/// 应用启动后延迟把浮窗贴到右上角。
+///
+/// 为什么要在 Rust 侧延迟：Windows 在窗口尺寸/样式变化时会把窗口挪到
+/// 默认位置（前端贴完又被挪走，实测过多次）。这里等 WebView 完全就绪后
+/// 一次性贴到位，最可靠。`first_run` 为 false（用户拖过）时不动。
+fn schedule_initial_snap(app: tauri::AppHandle, first_run: bool, height: f64) {
+    if !first_run {
+        return;
+    }
+    std::thread::spawn(move || {
+        // 连着贴几次：前端的高度自适应会触发多次 resize，而 Windows 每次 resize
+        // 都可能把窗口挪回默认位置，所以只有「最后一次」才能留住。
+        for ms in [1200u64, 2500, 3800, 5200] {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Some(win) = handle.get_webview_window("mini") {
+                    let _ = win.set_size(tauri::LogicalSize::new(400.0, height.max(200.0)));
+                    let scale = win.scale_factor().unwrap_or(1.0);
+                    let monitor = win
+                        .current_monitor()
+                        .ok()
+                        .flatten()
+                        .or_else(|| win.primary_monitor().ok().flatten());
+                    if let Some(m) = monitor {
+                        let wa = m.work_area();
+                        let gap = 16.0 * scale;
+                        let x = wa.position.x as f64 + wa.size.width as f64 - 400.0 * scale - gap;
+                        let y = wa.position.y as f64 + gap;
+                        let _ = win.set_position(tauri::PhysicalPosition::new(
+                            x.round() as i32,
+                            y.round() as i32,
+                        ));
+                    }
+                }
+            });
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
+    });
+}
+
+/// 前端告诉后端「是否需要初始贴边」
+#[tauri::command]
+fn request_initial_snap(app: tauri::AppHandle, first_run: bool, height: f64) {
+    schedule_initial_snap(app, first_run, height);
 }
 
 /// 开机自启开关
@@ -194,7 +305,12 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     let next = !MINI_LOCKED.lock().map(|g| *g).unwrap_or(false);
                     let _ = w.set_always_on_top(next);
                     let _ = w.set_resizable(!next);
+                    // 固定时鼠标穿透到桌面；托盘菜单仍可解除
+                    let _ = w.set_ignore_cursor_events(next);
                     if let Ok(mut guard) = MINI_LOCKED.lock() {
+                        *guard = next;
+                    }
+                    if let Ok(mut guard) = MINI_CLICK_THROUGH.lock() {
                         *guard = next;
                     }
                 }
@@ -261,26 +377,21 @@ pub fn run() {
             hide_mini,
             set_mini_always_on_top,
             set_mini_locked,
+            set_mini_click_through,
+            snap_mini_top_right,
+            request_initial_snap,
+            mini_work_area_height,
             set_autostart,
             get_autostart,
             set_tray_visible,
             get_tray_visible
         ])
         .setup(|app| {
-            // 浮窗：不置顶、可拖动（在桌面上就行）
+            // 浮窗：真透明窗口（不要 Mica，否则桌面透不过来）+ 不占任务栏
             if let Some(mini) = app.get_webview_window("mini") {
                 let _ = mini.set_always_on_top(false);
                 let _ = mini.set_resizable(true);
-                #[cfg(target_os = "windows")]
-                {
-                    use tauri::window::{Effect, EffectState, EffectsBuilder};
-                    let _ = mini.set_effects(
-                        EffectsBuilder::new()
-                            .effect(Effect::Mica)
-                            .state(EffectState::Active)
-                            .build(),
-                    );
-                }
+                let _ = mini.set_skip_taskbar(true);
             }
             // 托盘常驻
             setup_tray(app.handle())?;

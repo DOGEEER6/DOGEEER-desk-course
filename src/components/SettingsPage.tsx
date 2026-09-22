@@ -12,6 +12,7 @@ import {
   getTrayVisible,
   hideMainWindow,
   isDesktop,
+  resetMiniToTopRight,
   setAutoStart,
   setMiniLocked,
   setTrayVisible,
@@ -262,6 +263,17 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
             </label>
 
             <div className="flex gap-2">
+              <button
+                className="btn btn-ghost h-8 px-3 text-[12px]"
+                onClick={async () => {
+                  const ok = await resetMiniToTopRight(420)
+                  if (!ok) toast('浏览器预览下没有浮窗', { tone: 'info' })
+                  else toast('浮窗已回到桌面右上角', { tone: 'success', duration: 2200 })
+                }}
+              >
+                <Icon name="pin" size={13} />
+                回到右上角
+              </button>
               <button
                 className="btn btn-ghost h-8 px-3 text-[12px]"
                 onClick={async () => {

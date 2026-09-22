@@ -487,21 +487,15 @@ await new Promise((r) => setTimeout(r, 1200))
 check('导入后出现课程卡片', (await evaluate(`return document.querySelectorAll('.tt-card').length`)) > 0)
 await shot('08-import-done')
 
-// 视图切换：周 / 月 / 学期
+// 视图切换：周 / 学期
 const segLabels = await evaluate(`return Array.from(document.querySelectorAll('.segmented button')).map(b => b.textContent.trim())`)
-check('存在周/月/学期三种视图', JSON.stringify(segLabels) === JSON.stringify(['周视图', '月视图', '学期视图']), JSON.stringify(segLabels))
+check('存在周/学期两种视图', JSON.stringify(segLabels) === JSON.stringify(['周视图', '学期视图']), JSON.stringify(segLabels))
 
 const clickSeg = (label) =>
   evaluate(`
     Array.from(document.querySelectorAll('.segmented button')).find(b => b.textContent.trim() === ${JSON.stringify(label)})?.click();
     return 'ok';
   `)
-
-await clickSeg('月视图')
-await new Promise((r) => setTimeout(r, 1000))
-check('月视图渲染', (await evaluate(`return document.querySelectorAll('.month-cell').length`)) >= 5)
-check('月视图显示课程', /节课/.test(await evaluate(`return document.body.innerText`)))
-await shot('09-month')
 
 await clickSeg('学期视图')
 await new Promise((r) => setTimeout(r, 1200))

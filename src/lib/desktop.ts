@@ -82,8 +82,84 @@ export const hideMainWindow = () => call<void>('hide_main')
 export const showMiniWindow = () => call<void>('set_mini_visible', { visible: true })
 export const hideMiniWindow = () => call<void>('hide_mini')
 export const setMiniAlwaysOnTop = (onTop: boolean) => call<void>('set_mini_always_on_top', { onTop })
-/** 固定 = 置顶 + 不可拖动改大小；解除后可以拖到任意位置 */
+/** 固定 = 置顶 + 不可拖动 + 不可改大小；解除后可以拖到任意位置 */
 export const setMiniLocked = (locked: boolean) => call<void>('set_mini_locked', { locked })
+/** 固定后让鼠标穿透到桌面 */
+export const setMiniClickThrough = (through: boolean) => call<void>('set_mini_click_through', { through })
+
+/* ---------------- 窗口几何 ---------------- */
+/*
+ * 注意：Tauri 的 Window 实例在 WebView2 上并没有暴露 currentMonitor/primaryMonitor，
+ * 但 WebView 自己知道屏幕工作区（screen.availXxx，已扣除任务栏），
+ * 而 setPosition / setSize 接受的是逻辑坐标（物理像素 / scaleFactor）。
+ * 直接用 CSS 像素就是逻辑坐标，不用手动换算。
+ */
+
+function invokeFn():
+  | (<T>(cmd: string, args?: Record<string, unknown>) => Promise<T>)
+  | undefined {
+  const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: <T>(c: string, a?: unknown) => Promise<T> } })
+    .__TAURI_INTERNALS__
+  return internals?.invoke as
+    | (<T>(cmd: string, args?: Record<string, unknown>) => Promise<T>)
+    | undefined
+}
+
+/**
+ * 浮窗几何。
+ *
+ * 血的教训（都实测过）：
+ *  1. 全局 Tauri API 的 `window.setSize()` 运行时传 `{width,height}`，后端要
+ *     `{Logical:{...}}`，报 unknown variant 后**静默失败**；
+ *  2. `set_position` 的单位会和前端再次缩放，导致窗口被夹回屏幕内。
+ * 所以尺寸用底层 invoke 显式传 Logical，**贴边定位直接交给 Rust 命令**
+ * （那边用 monitor.work_area() 的物理像素最准）。
+ */
+export async function setMiniSize(width: number, height: number): Promise<boolean> {
+  const fn = invokeFn()
+  if (!fn) return false
+  try {
+    await fn('plugin:window|set_size', {
+      label: 'mini',
+      value: { Logical: { width: Math.round(width), height: Math.round(height) } },
+    })
+    return true
+  } catch (err) {
+    console.warn('[desktop] set_size 失败', err)
+    return false
+  }
+}
+
+/** 贴到当前显示器工作区右上角（由 Rust 计算物理坐标） */
+export async function snapMiniToTopRight(width: number, height: number, gap = 16): Promise<boolean> {
+  const ok = await call<void>('snap_mini_top_right', { width, height, gap })
+  if (ok != null) return true
+  // 浏览器预览时退化为普通 set_size
+  return setMiniSize(width, height)
+}
+
+/** 工作区高度（逻辑像素），用于限制浮窗内容高度 */
+export async function miniWorkAreaHeight(): Promise<number> {
+  const h = await call<number>('mini_work_area_height')
+  if (typeof h === 'number' && h > 200) return h
+  const s = window.screen
+  const dpr = window.devicePixelRatio || 1
+  return (s.availHeight || s.height || 1080) / dpr
+}
+
+/**
+ * 请求后端在启动完成后（延迟 2.6s）一次性把浮窗贴到右上角。
+ * 前端自己贴会被 Windows 的默认定位覆盖，所以交给 Rust 收尾。
+ */
+export async function requestInitialSnap(firstRun: boolean, height: number): Promise<boolean> {
+  const r = await call<void>('request_initial_snap', { firstRun, height })
+  return r != null
+}
+
+/** 设置页「浮窗回到右上角」 */
+export async function resetMiniToTopRight(height: number): Promise<boolean> {
+  return snapMiniToTopRight(400, Math.max(200, Math.round(height)))
+}
 
 /** 托盘图标 */
 export const setTrayVisible = (visible: boolean) => call<void>('set_tray_visible', { visible })

@@ -16,13 +16,26 @@ import { colorOf } from '../lib/palette'
 import { dueLabel, pad2, sessionCoversWeek, weekIndexOf } from '../lib/time'
 import { Icon, springSnappy, springSoft } from '../components/ui'
 import { useNow } from '../hooks'
-import { hideCurrentWindow, isDesktop, setMiniLocked, showMainWindow } from '../lib/desktop'
+import {
+  hideCurrentWindow,
+  isDesktop,
+  miniWorkAreaHeight,
+  requestInitialSnap,
+  setMiniClickThrough,
+  setMiniLocked,
+  setMiniSize,
+  showMainWindow,
+} from '../lib/desktop'
 import { playChime } from '../lib/notify'
 import { applyTheme, MINI_THEME_KEY } from '../lib/theme'
 
 /* ---------------- 窗口位置/大小持久化 ---------------- */
 
-const GEOM_KEY = 'lumen-mini-geom'
+const GEOM_KEY = 'lumen-mini-geom-v2'
+/** 浮窗固定宽度；高度按内容自适应 */
+const MINI_WIDTH = 400
+const MINI_MIN_HEIGHT = 200
+const TOP_GAP = 16
 
 interface MiniGeom {
   x: number
@@ -91,6 +104,7 @@ export default function MiniWidget() {
   const [doneClasses, setDoneClasses] = useState<Set<string>>(new Set())
   const [justDone, setJustDone] = useState<Set<string>>(new Set())
   const restored = useRef(false)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   /** 勾掉一节课（表示已上完） */
   const toggleClassDone = (courseId: string, sessionId: string) => {
@@ -132,16 +146,40 @@ export default function MiniWidget() {
     const win = geoWindow()
     if (!win) return
 
-    const g = readGeom()
-    if (g) {
-      void win.setPosition?.({ x: g.x, y: g.y })
-      void win.setSize?.({ width: g.w, height: g.h })
-    }
-    void setMiniLocked(!!useApp.getState().settings.miniAlwaysOnTop)
+    void (async () => {
+      const g = readGeom()
+      if (g) {
+        // 用户之前拖过：恢复尺寸（位置保持不变）
+        await setMiniSize(MINI_WIDTH, Math.max(MINI_MIN_HEIGHT, g.h))
+      } else {
+        // 首次运行 / 没拖过：交给 Rust 在启动完成后延迟贴到右上角
+        // （前端贴完会被 Windows 的默认定位覆盖）
+        await new Promise((r) => window.setTimeout(r, 300))
+        const measured = rootRef.current?.scrollHeight
+        const h = Math.max(MINI_MIN_HEIGHT, Math.min(900, Math.ceil(measured ?? 420)))
+        await requestInitialSnap(true, h)
+      }
+      await setMiniLocked(!!useApp.getState().settings.miniAlwaysOnTop)
+      await setMiniClickThrough(!!useApp.getState().settings.miniAlwaysOnTop)
+    })()
 
     let unMoved: (() => void) | undefined
     let unResized: (() => void) | undefined
+    // 只有用户自己拖过窗口，才认为「位置是用户定的」。
+    // 否则启动阶段的高度自适应会被当成用户操作，把默认位置也存下来，
+    // 下次启动就会走「恢复位置」分支、永远贴不到右上角。
+    let userMoved = false
+    const markMoved = () => {
+      userMoved = true
+    }
+    const onHeaderDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t?.closest('.drag-handle')) markMoved()
+    }
+    window.addEventListener('pointerdown', onHeaderDown)
+
     const persist = async () => {
+      if (!userMoved) return
       try {
         const [pos, size] = await Promise.all([win.outerPosition?.(), win.outerSize?.()])
         if (pos && size) saveGeom({ x: pos.x, y: pos.y, w: size.width, h: size.height })
@@ -158,13 +196,72 @@ export default function MiniWidget() {
     return () => {
       unMoved?.()
       unResized?.()
+      window.removeEventListener('pointerdown', onHeaderDown)
     }
   }, [])
 
-  /* 用户切换「固定」时同步到窗口 */
+  /* 高度自适应 + 贴边。
+     重要：Windows 在窗口尺寸变化后会把窗口挪到默认位置，
+     所以必须在「尺寸稳定」之后再贴右上角，否则贴完又会被挪走。 */
+  useEffect(() => {
+    if (!isDesktop() || miniPinned) return
+    const el = rootRef.current
+    if (!el) return
+    let raf = 0
+    let settleTimer = 0
+    let limit = 900
+    let lastSize = 0
+
+    const snapNow = () => {
+      if (readGeom()) return
+      const h = Math.ceil(el.scrollHeight)
+      const target = Math.max(MINI_MIN_HEIGHT, Math.min(limit - TOP_GAP * 2, h))
+      lastSize = target
+      // 后端负责首次贴边；这里只在后端不可用时兜底（浏览器预览）
+      void setMiniSize(MINI_WIDTH, target)
+      void requestInitialSnap(false, target)
+    }
+
+    /** 尺寸变化后防抖：安静 900ms 再贴边 */
+    const scheduleSnap = () => {
+      window.clearTimeout(settleTimer)
+      settleTimer = window.setTimeout(snapNow, 900)
+    }
+
+    const apply = () => {
+      const h = Math.ceil(el.scrollHeight)
+      const maxH = limit - TOP_GAP * 2
+      const target = Math.max(MINI_MIN_HEIGHT, Math.min(maxH, h))
+      if (Math.abs(target - lastSize) >= 6) {
+        lastSize = target
+        void setMiniSize(MINI_WIDTH, target)
+      }
+      scheduleSnap()
+    }
+    const schedule = () => {
+      window.cancelAnimationFrame(raf)
+      raf = window.requestAnimationFrame(apply)
+    }
+
+    void miniWorkAreaHeight().then((h) => {
+      limit = h
+      schedule()
+    })
+
+    const ro = new ResizeObserver(schedule)
+    ro.observe(el)
+    schedule()
+    return () => {
+      ro.disconnect()
+      window.clearTimeout(settleTimer)
+      window.cancelAnimationFrame(raf)
+    }
+  }, [miniPinned, expanded])
+
+  /* 固定后鼠标穿透到桌面 */
   useEffect(() => {
     if (!isDesktop()) return
-    void setMiniLocked(!!miniPinned)
+    void setMiniClickThrough(!!miniPinned)
   }, [miniPinned])
 
   /* 主界面切换深浅色时同步（跨窗口用 storage 事件 + 重新聚焦时兜底） */
@@ -240,18 +337,18 @@ export default function MiniWidget() {
 
   return (
     /* 卡片留出 1px 让位给 Windows 自绘窗口边缘，避免出现一圈灰描边 */
-    <div className="relative h-full w-full overflow-hidden rounded-[9px]">
-      <div className="frost frost-card relative flex h-full w-full flex-col overflow-hidden rounded-[8px]">
+    <div ref={rootRef} className="relative w-full overflow-hidden rounded-[9px]">
+      <div className="frost frost-card relative flex w-full flex-col overflow-hidden rounded-[8px]">
         {/* 顶部高光，深色桌面上更立体 */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-24 opacity-70"
           style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0))' }}
         />
 
-        {/* 头部：未固定时可拖动（固定后停在原位置） */}
+        {/* 头部：自带一层局部模糊 + 未固定时可拖动 */}
         <header
           className={clsx(
-            'relative z-[1] flex flex-none items-center gap-3 px-4 pb-2.5 pt-3.5',
+            'mini-panel-header relative z-[1] flex flex-none items-center gap-3 px-4 pb-2.5 pt-3.5',
             miniPinned ? 'lock-handle' : 'drag-handle',
           )}
         >
@@ -427,7 +524,7 @@ export default function MiniWidget() {
                             )}
                           </div>
 
-                          <div className="mt-2.5 rounded-[12px] bg-surface-1 p-3 text-ink">
+                          <div className="mini-panel mt-2.5 rounded-[12px] p-3 text-ink">
                             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-4">
                               <Icon name="flag" size={12} />
                               作业 / DDL
@@ -514,7 +611,7 @@ export default function MiniWidget() {
 
           {/* 今日 DDL 汇总 */}
           {hasDdlSection && (
-            <div className="mt-3 rounded-[16px] bg-surface-1 p-3">
+            <div className="mini-panel mt-3 rounded-[16px] p-3">
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-4">
                 <Icon name="flag" size={11} />
                 近期待办
@@ -599,8 +696,8 @@ export default function MiniWidget() {
           <div className="h-2" />
         </div>
 
-        {/* 底部 */}
-        <footer className="no-drag relative z-[1] flex flex-none items-center gap-2.5 border-t border-line px-3.5 py-2.5">
+        {/* 底部操作栏：同样加模糊，文字不糊在桌面上 */}
+        <footer className="no-drag mini-panel-footer relative z-[1] flex flex-none items-center gap-2.5 px-3.5 py-2.5">
           <span className="flex-1 text-[11px] text-ink-4">
             {openCount > 0 ? `${openCount} 项待办未完成` : '待办已清空 🎉'}
           </span>
