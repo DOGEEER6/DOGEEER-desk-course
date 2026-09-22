@@ -351,29 +351,46 @@ export async function parseTimetableFile(
     })
   }
 
-  // 同一门课在同一时段如果既出现「每周」又出现了明确周次（常见于同时导入
-  // 网格表和清单表：表格里带周次、清单里不带），以明确周次为准，丢弃「每周」。
-  const bySlot = new Map<string, ParsedRecord[]>()
-  for (const r of merged.values()) {
-    const slot = `${r.name}|${r.day}|${r.startPeriod}|${r.endPeriod}`
-    const arr = bySlot.get(slot) ?? []
+  // 二次去重：按「课程 + 星期 + 节次」汇总（不含教师）。
+  // 场景：网格表写「线性代数 张老师（1-16）」，清单表写「线性代数 / 1-2节 / A101」但没写教师，
+  //      两者去重键不同、会各留一条。这里统一成一条：有明确周次的优先，
+  //      教师/地点从互补的记录里补全；只有两边都写了不同教师时才保留两条。
+  const firstPass = [...merged.values()]
+  const bySlotNoTeacher = new Map<string, ParsedRecord[]>()
+  for (const r of firstPass) {
+    const k = `${r.name}|${r.day}|${r.startPeriod}|${r.endPeriod}`
+    const arr = bySlotNoTeacher.get(k) ?? []
     arr.push(r)
-    bySlot.set(slot, arr)
+    bySlotNoTeacher.set(k, arr)
   }
   const final: ParsedRecord[] = []
-  for (const arr of bySlot.values()) {
-    if (arr.length > 1 && arr.some((x) => x.weeks.length > 0)) {
-      const withWeeks = arr.filter((x) => x.weeks.length > 0)
-      final.push(...withWeeks)
-      // 用带周次的记录补全信息
+  for (const arr of bySlotNoTeacher.values()) {
+    if (arr.length === 1) {
+      final.push(arr[0])
+      continue
+    }
+    const withWeeks = arr.filter((x) => x.weeks.length > 0)
+    const weekly = arr.filter((x) => x.weeks.length === 0)
+    if (withWeeks.length > 0) {
+      // 有周次的都留下（可能有多位老师各带部分周次）
       for (const a of withWeeks) {
         for (const b of arr) {
           a.room = a.room ?? b.room
           a.teacher = a.teacher ?? b.teacher
         }
       }
+      final.push(...withWeeks)
+      // 无周次的只有「教师不一致」才作为独立安排保留
+      for (const wk of weekly) {
+        const differs = withWeeks.every((x) => {
+          const a = (x.teacher ?? '').trim()
+          const b = (wk.teacher ?? '').trim()
+          return a !== '' && b !== '' && a !== b
+        })
+        if (differs) final.push(wk)
+      }
     } else {
-      final.push(...arr)
+      final.push(...weekly)
     }
   }
 

@@ -124,6 +124,66 @@ console.log('\n[isDragGesture]')
 check('微小抖动不算拖动', snap.isDragGesture(2, 2) === false)
 check('明显位移算拖动', snap.isDragGesture(9, 0) === true)
 
+/* ---------------- 合并策略：同名同时段 ---------------- */
+console.log('\n[合并策略：同名同时段]')
+const XLSX = await import('xlsx')
+const parser = await load('src/lib/excel.ts')
+{
+  // 网格表：线性代数 周二 1-2 节 张老师（1-16）；清单表同名同时段但没写教师
+  const grid = [
+    ['星期\n节次', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'],
+    ['1\n08:00-08:45', '', '线性代数\n张老师（1-16）\nA101', '', '', '', '', ''],
+    ['2\n08:50-09:35', '', '', '', '', '', '', ''],
+  ]
+  const wb = XLSX.utils.book_new()
+  const wsG = XLSX.utils.aoa_to_sheet(grid)
+  // 合并 B2:B3 → 表示第 1-2 节连堂（真实教务表格就是这么标的）
+  wsG['!merges'] = [XLSX.utils.decode_range('C2:C3')]
+  XLSX.utils.book_append_sheet(wb, wsG, '课程表')
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ['课程名称', '星期', '节次', '地点'],
+      ['线性代数', '星期二', '1-2节', 'A101'],
+    ]),
+    '课程清单',
+  )
+  const res = await parser.parseTimetableFile(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), {
+    totalWeeks: 20,
+  })
+  const las = res.records.filter((r) => r.name === '线性代数')
+  check('清单表没写教师 → 与网格表合并为 1 条', las.length === 1, `实际 ${las.length} 条`)
+}
+{
+  // 同一时段两位老师各带部分周次 → 必须保留两条
+  const grid = [
+    ['星期\n节次', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'],
+    ['1\n08:00-08:45', '', '线性代数\n张老师（1-8）\nA101', '', '', '', '', ''],
+    ['2\n08:50-09:35', '', '', '', '', '', '', ''],
+  ]
+  const wb = XLSX.utils.book_new()
+  const wsG2 = XLSX.utils.aoa_to_sheet(grid)
+  wsG2['!merges'] = [XLSX.utils.decode_range('C2:C3')]
+  XLSX.utils.book_append_sheet(wb, wsG2, '课程表')
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ['课程名称', '星期', '节次', '地点', '教师'],
+      ['线性代数', '星期二', '1-2节', 'A101', '李老师'],
+    ]),
+    '课程清单',
+  )
+  const res = await parser.parseTimetableFile(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), {
+    totalWeeks: 20,
+  })
+  const las = res.records.filter((r) => r.name === '线性代数')
+  check(
+    '两位老师各带部分周次 → 保留 2 条',
+    las.length === 2,
+    las.map((r) => r.teacher ?? '-').join(' , '),
+  )
+}
+
 /* ---------------- excel.ts ---------------- */
 const file = process.argv[2]
 if (file) {

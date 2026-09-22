@@ -522,7 +522,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
               <Icon name="calendar" size={22} />
             </div>
             <div>
-              <div className="text-[14px] font-bold">Lumen 课程表 <span className="font-normal text-ink-3">v0.1.0</span></div>
+              <div className="text-[14px] font-bold">DOGEEER 课表 <span className="font-normal text-ink-3">v0.1.0</span></div>
               <div className="mt-0.5 text-[11.5px] text-ink-3">
                 {isTauri() ? '桌面版' : '浏览器预览版'} · 数据保存在本机，不会上传
               </div>

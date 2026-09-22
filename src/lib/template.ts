@@ -57,7 +57,7 @@ export function downloadTemplate(periods: PeriodSlot[] = DEFAULT_PERIODS) {
   XLSX.utils.book_append_sheet(wb, ws2, '课程清单')
 
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
-  download(new Blob([out], { type: 'application/octet-stream' }), 'Lumen课程表模板.xlsx')
+  download(new Blob([out], { type: 'application/octet-stream' }), 'DOGEEER课程表模板.xlsx')
 }
 
 /* ------------------------------------------------------------------ */
@@ -83,14 +83,14 @@ export function exportBackup(data: Omit<BackupFile, 'app' | 'version' | 'exporte
   }
   download(
     new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }),
-    `Lumen课程表备份-${dateKey(new Date())}.json`,
+    `DOGEEER课程表备份-${dateKey(new Date())}.json`,
   )
 }
 
 export function readBackup(text: string): BackupFile {
   const parsed = JSON.parse(text) as BackupFile
   if (parsed?.app !== 'lumen-course' || !Array.isArray(parsed.courses)) {
-    throw new Error('不是有效的 Lumen 课程表备份文件')
+    throw new Error('不是有效的 DOGEEER 课程表备份文件')
   }
   return parsed
 }
