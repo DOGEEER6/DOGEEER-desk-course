@@ -82,6 +82,12 @@ export const hideMainWindow = () => call<void>('hide_main')
 export const showMiniWindow = () => call<void>('set_mini_visible', { visible: true })
 export const hideMiniWindow = () => call<void>('hide_mini')
 export const setMiniAlwaysOnTop = (onTop: boolean) => call<void>('set_mini_always_on_top', { onTop })
+/** 固定 = 置顶 + 不可拖动改大小；解除后可以拖到任意位置 */
+export const setMiniLocked = (locked: boolean) => call<void>('set_mini_locked', { locked })
+
+/** 托盘图标 */
+export const setTrayVisible = (visible: boolean) => call<void>('set_tray_visible', { visible })
+export const getTrayVisible = () => call<boolean>('get_tray_visible')
 
 /** 开机自启 */
 export const setAutoStart = (enabled: boolean) => call<boolean>('set_autostart', { enabled })

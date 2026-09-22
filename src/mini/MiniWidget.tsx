@@ -16,8 +16,9 @@ import { colorOf } from '../lib/palette'
 import { dueLabel, pad2, sessionCoversWeek, weekIndexOf } from '../lib/time'
 import { Icon, springSnappy, springSoft } from '../components/ui'
 import { useNow } from '../hooks'
-import { hideCurrentWindow, isDesktop, setMiniAlwaysOnTop, showMainWindow } from '../lib/desktop'
+import { hideCurrentWindow, isDesktop, setMiniLocked, showMainWindow } from '../lib/desktop'
 import { playChime } from '../lib/notify'
+import { applyTheme, MINI_THEME_KEY } from '../lib/theme'
 
 /* ---------------- 窗口位置/大小持久化 ---------------- */
 
@@ -124,7 +125,7 @@ export default function MiniWidget() {
   const week = weekIndexOf(settings.semester.startDate, now)
   const weekday = (now.getDay() === 0 ? 7 : now.getDay()) as Weekday
 
-  /* 恢复窗口位置与大小 + 应用置顶偏好（只做一次） */
+  /* 恢复窗口位置与大小 + 应用固定偏好（只做一次） */
   useEffect(() => {
     if (!isDesktop() || restored.current) return
     restored.current = true
@@ -136,7 +137,7 @@ export default function MiniWidget() {
       void win.setPosition?.({ x: g.x, y: g.y })
       void win.setSize?.({ width: g.w, height: g.h })
     }
-    void setMiniAlwaysOnTop(!!useApp.getState().settings.miniAlwaysOnTop)
+    void setMiniLocked(!!useApp.getState().settings.miniAlwaysOnTop)
 
     let unMoved: (() => void) | undefined
     let unResized: (() => void) | undefined
@@ -163,8 +164,31 @@ export default function MiniWidget() {
   /* 用户切换「固定」时同步到窗口 */
   useEffect(() => {
     if (!isDesktop()) return
-    void setMiniAlwaysOnTop(!!miniPinned)
+    void setMiniLocked(!!miniPinned)
   }, [miniPinned])
+
+  /* 主界面切换深浅色时同步（跨窗口用 storage 事件 + 重新聚焦时兜底） */
+  useEffect(() => {
+    const readTheme = () => {
+      try {
+        const v = localStorage.getItem(MINI_THEME_KEY)
+        if (v === 'light' || v === 'dark' || v === 'system') applyTheme(v)
+      } catch {
+        /* ignore */
+      }
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === MINI_THEME_KEY || e.key === null) readTheme()
+    }
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('focus', readTheme)
+    const timer = window.setInterval(readTheme, 4000)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', readTheme)
+      window.clearInterval(timer)
+    }
+  }, [])
 
   /* ---- 今日课程 ---- */
   const rows = useMemo<Row[]>(() => {
@@ -224,8 +248,13 @@ export default function MiniWidget() {
           style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0))' }}
         />
 
-        {/* 头部 */}
-        <header className="drag-handle relative z-[1] flex flex-none items-center gap-3 px-4 pb-2.5 pt-3.5">
+        {/* 头部：未固定时可拖动（固定后停在原位置） */}
+        <header
+          className={clsx(
+            'relative z-[1] flex flex-none items-center gap-3 px-4 pb-2.5 pt-3.5',
+            miniPinned ? 'lock-handle' : 'drag-handle',
+          )}
+        >
           <div className="grid h-9 w-9 flex-none place-items-center rounded-[11px] bg-gradient-to-br from-[#3AA0FF] to-[#0A84FF] text-white shadow-[0_6px_14px_-6px_rgba(10,132,255,0.95)]">
             <Icon name="calendar" size={17} />
           </div>

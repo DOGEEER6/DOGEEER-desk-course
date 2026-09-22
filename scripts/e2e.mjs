@@ -367,30 +367,63 @@ await evaluate(`localStorage.setItem('lumen-course-v1', ${JSON.stringify(json)})
 await send('Page.reload', { ignoreCache: false })
 await new Promise((r) => setTimeout(r, 3200))
 
-// 自然语言添加待办
-const focused = await evaluate(`
-  const inputs = Array.from(document.querySelectorAll('input.field'));
-  const i = inputs.find(x => (x.placeholder || '').includes('操作系统实验报告'));
-  if (!i) return 'no-input';
-  i.focus();
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-  setter.call(i, '操作系统实验报告 周五 18:00 !high');
-  i.dispatchEvent(new Event('input', { bubbles: true }));
-  return 'ok';
+// 待办：折叠 / 展开 + 弹窗添加
+await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' })); return 'ok'`)
+await new Promise((r) => setTimeout(r, 800))
+
+const collapseBtn = await evaluate(`return !!document.querySelector('[data-testid="todo-collapse"]')`)
+check('待办面板有折叠按钮', collapseBtn)
+await evaluate(`document.querySelector('[data-testid="todo-collapse"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 700))
+const collapsedText = await evaluate(`
+  const el = document.querySelector('[data-testid="todo-expand"]');
+  return el ? el.innerText.replace(/\\n/g, ' ') : 'none';
 `)
-check('找到待办快速输入框', focused === 'ok', String(focused))
-await new Promise((r) => setTimeout(r, 400))
+check('折叠后只显示数量与下一个 DDL', collapsedText !== 'none' && /项待办|待办已清空/.test(collapsedText), collapsedText.slice(0, 60))
+check('折叠后列表隐藏', (await evaluate(`return document.querySelectorAll('.checkbox').length`)) === 0)
+await shot('04-todo-collapsed')
+
+await evaluate(`document.querySelector('[data-testid="todo-expand"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 700))
+check('可以再次展开', (await evaluate(`return !!document.querySelector('[data-testid="todo-add"]')`)))
+
+await evaluate(`document.querySelector('[data-testid="todo-add"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 900))
+const dlg2 = await evaluate(`return document.body.innerText`)
+check('点添加弹出选项卡', /添加待办 \/ 作业/.test(dlg2) && /截止时间 DDL/.test(dlg2))
+check('选项卡含排期与优先级', /计划开始/.test(dlg2) && /优先级/.test(dlg2) && /关联课程/.test(dlg2))
+await shot('05-todo-dialog')
+
+// 用快捷 DDL + 表单提交
 await evaluate(`
-  const inputs = Array.from(document.querySelectorAll('input.field'));
-  const i = inputs.find(x => (x.placeholder || '').includes('操作系统实验报告'));
-  i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  const inp = document.querySelector('input[placeholder="例如：操作系统实验报告"]');
+  if (!inp) return 'no-input';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setter.call(inp, '操作系统实验报告');
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
   return 'ok';
 `)
-await new Promise((r) => setTimeout(r, 1000))
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '明天 18:00')?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 300))
+await evaluate(`
+  Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '添加')?.click();
+  return 'ok';
+`)
+await new Promise((r) => setTimeout(r, 1400))
 const afterAdd = await evaluate(`return document.body.innerText`)
-check('自然语言速记成功加入待办', /操作系统实验报告/.test(afterAdd))
-check('解析出 DDL 并高亮', /截止|逾期/.test(afterAdd))
-await shot('04-todo-added')
+check('弹窗添加待办成功', /操作系统实验报告/.test(afterAdd))
+check(
+  '待办带上了 DDL',
+  await evaluate(`
+    const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+    const t = s.state.todos.find(x => x.title === '操作系统实验报告');
+    return !!t && !!t.dueAt;
+  `),
+)
+await shot('06-todo-added')
 
 // 设置页
 await evaluate(`
@@ -538,7 +571,6 @@ await waitReady()
 await new Promise((r) => setTimeout(r, 2200))
 check('浅色主题生效', (await evaluate(`return document.documentElement.dataset.theme`)) === 'light')
 await shot('14-light')
-await setTheme('system')
 
 // ---- 浮窗（mini 窗口）验收 ----
 const miniTarget = targets.find((t) => t.type === 'page' && t.url.includes('mini'))
@@ -584,7 +616,7 @@ if (miniTarget) {
   await new Promise((r) => setTimeout(r, 3000))
 
   const dark = await mev(`return document.documentElement.dataset.theme`)
-  check('浮窗默认深色', dark === 'dark', String(dark))
+  check('浮窗主题与主界面同步（此时为浅色）', dark === 'light', String(dark))
 
   const glass = await mev(`
     const el = document.querySelector('.frost-card');
@@ -646,6 +678,31 @@ if (TARGET_HINT.includes('tauri')) {
   check('窗口外壳有圆角', (await evaluate(`return getComputedStyle(document.querySelector('.window-shell')).borderRadius`)) !== '0px')
   const btns = await evaluate(`return Array.from(document.querySelectorAll('.titlebar-btn')).map(b => b.title)`)
   check('标题栏含最小化/最大化/关闭', JSON.stringify(btns).includes('最小化') && JSON.stringify(btns).includes('关闭'), JSON.stringify(btns))
+
+  // 最小化 / 最大化 必须真的能调用（之前缺权限，点了没反应）
+  const invoke = (cmd, args = {}) =>
+    evaluate(`
+      return await window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)})
+        .then(() => 'ok').catch(e => 'ERR ' + String(e).slice(0, 80));
+    `)
+  check('最大化可用', (await invoke('plugin:window|toggle_maximize', { label: 'main' })) === 'ok')
+  await new Promise((r) => setTimeout(r, 700))
+  check(
+    '最大化状态可读取',
+    (await evaluate(`return await window.__TAURI_INTERNALS__.invoke('plugin:window|is_maximized',{label:'main'}).catch(()=>null)`)) === true,
+  )
+  await invoke('plugin:window|unmaximize', { label: 'main' })
+  await new Promise((r) => setTimeout(r, 600))
+  check('最小化可用', (await invoke('plugin:window|minimize', { label: 'main' })) === 'ok')
+  await new Promise((r) => setTimeout(r, 700))
+  await invoke('plugin:window|unminimize', { label: 'main' })
+  check('托盘图标默认显示', (await invoke('get_tray_visible')) === 'ok')
+  check(
+    '托盘可见状态为 true',
+    (await evaluate(`return await window.__TAURI_INTERNALS__.invoke('get_tray_visible')`)) === true,
+  )
+  check('固定浮窗命令可用', (await invoke('set_mini_locked', { locked: true })) === 'ok')
+  check('解除固定命令可用', (await invoke('set_mini_locked', { locked: false })) === 'ok')
 }
 
 // 添加课程 → 未排课托盘 → 拖到课表上排课

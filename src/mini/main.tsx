@@ -4,7 +4,7 @@ import '../index.css'
 import MiniWidget from './MiniWidget'
 import { initTheme, MINI_THEME_KEY } from '../lib/theme'
 
-// 浮窗默认深色：深色桌面上更自然，也不会出现浅色描边
+// 浮窗主题跟随主界面（主窗口会把选择写进这个键）；没写过时默认深色
 initTheme(MINI_THEME_KEY, 'dark')
 
 createRoot(document.getElementById('root')!).render(

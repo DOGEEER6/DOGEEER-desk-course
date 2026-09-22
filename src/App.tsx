@@ -13,8 +13,9 @@ import { ImportDialog, ImportDropOverlay } from './components/ImportDialog'
 import { Icon, Overlay, Segmented, ToastHost, springSoft } from './components/ui'
 import { MonthView, TermView } from './components/CalendarViews'
 import { AddCourseDialog, DraftTray } from './components/AddCourseDialog'
+import { TodoDialog } from './components/TodoDialog'
 import { TitleBar } from './components/TitleBar'
-import { setTheme, syncMiniTheme, MAIN_THEME_KEY } from './lib/theme'
+import { setTheme, MAIN_THEME_KEY } from './lib/theme'
 import { colorOf } from './lib/palette'
 import { mondayOfWeek, pad2, weekIndexOf } from './lib/time'
 import { toast } from './lib/toast'
@@ -44,6 +45,8 @@ export default function App() {
   const [jumpOpen, setJumpOpen] = useState(false)
   const [newCourse, setNewCourse] = useState<{ day: Weekday; start: number; end: number } | null>(null)
   const [calView, setCalView] = useState<CalView>('week')
+  const [todoCollapsed, setTodoCollapsed] = useState(false)
+  const [todoDialogOpen, setTodoDialogOpen] = useState(false)
   const [addCourseOpen, setAddCourseOpen] = useState(false)
   const [trayDrag, setTrayDrag] = useState<{
     courseId: string
@@ -52,13 +55,11 @@ export default function App() {
     span: number
   } | null>(null)
 
-  /** 主题：默认深色；设置页可改，改完立即写入并持久化 */
+  /** 主题：默认深色；设置页可改，改完立即写入并持久化（同时同步浮窗） */
   const settingsTheme = settings.theme ?? 'dark'
   useEffect(() => {
     setTheme(settingsTheme, MAIN_THEME_KEY)
-    // 只有用户明确开启「浮窗跟随主题」时才同步给浮窗
-    if (settings.miniFollowTheme) syncMiniTheme(settingsTheme)
-  }, [settingsTheme, settings.miniFollowTheme])
+  }, [settingsTheme])
 
   const openTodoCount = useMemo(() => todos.filter((t) => !t.done && !t.archived).length, [todos])
 
@@ -72,6 +73,19 @@ export default function App() {
     const KEY = 'lumen-desktop-initialized'
     const initialized = localStorage.getItem(KEY) === '1'
     void (async () => {
+      // 0.1.0 之前的版本会把示例 DDL 当成真实数据残留，这里清一次
+      const PURGE = 'lumen-purged-demo-ddls-0.1.0'
+      if (localStorage.getItem(PURGE) !== '1') {
+        localStorage.setItem(PURGE, '1')
+        const store = useApp.getState()
+        const demoKeywords = ['操作系统实验报告', '线性代数 期中复习', '程序设计实践 A(I) 实验报告', '工科数学分析 第五章习题', '国际交流英语 presentation 选题']
+        const kept = store.todos.filter((t) => !demoKeywords.includes(t.title))
+        if (kept.length !== store.todos.length) {
+          useApp.setState({ todos: kept })
+          toast('已清理示例 DDL', { desc: '只保留你自己添加的待办，课表数据未改动', tone: 'info', duration: 4200 })
+        }
+      }
+
       // 默认开启开机自启（只显示浮窗），用户可在设置里关掉
       const AKEY = 'lumen-autostart-initialized'
       if (localStorage.getItem(AKEY) !== '1') {
@@ -322,10 +336,20 @@ export default function App() {
                   transition={springSoft}
                 >
                   {calView === 'week' && (
-                    <div className="flex flex-none gap-2.5">
+                    <div className="flex flex-none items-stretch gap-2.5">
                       <TodayHero now={now} onOpenCourse={selectCourse} />
-                      <div className="glass flex w-[392px] flex-none flex-col rounded-[24px] p-3.5">
-                        <TodoPanel compact />
+                      <div
+                        className={clsx(
+                          'glass flex flex-none flex-col rounded-[24px] p-3.5 transition-[width] duration-300',
+                          todoCollapsed ? 'w-[300px]' : 'w-[392px]',
+                        )}
+                      >
+                        <TodoPanel
+                          compact
+                          collapsed={todoCollapsed}
+                          onToggleCollapse={() => setTodoCollapsed((v) => !v)}
+                          onAddClick={() => setTodoDialogOpen(true)}
+                        />
                       </div>
                     </div>
                   )}
@@ -466,7 +490,7 @@ export default function App() {
                   <TodayList now={now} onOpenCourse={selectCourse} />
                 </div>
                 <div className="glass flex w-[420px] flex-none flex-col rounded-[24px] p-5">
-                  <TodoPanel compact />
+                  <TodoPanel compact onAddClick={() => setTodoDialogOpen(true)} />
                 </div>
               </motion.div>
             )}
@@ -481,7 +505,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={springSoft}
               >
-                <TodoPanel />
+                <TodoPanel onAddClick={() => setTodoDialogOpen(true)} />
               </motion.div>
             )}
 
@@ -546,6 +570,8 @@ export default function App() {
           setView('timetable')
         }}
       />
+
+      <TodoDialog open={todoDialogOpen} onClose={() => setTodoDialogOpen(false)} />
 
       <AddCourseDialog
         open={addCourseOpen}

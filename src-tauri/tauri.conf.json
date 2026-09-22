@@ -48,7 +48,13 @@
       }
     ],
     "security": { "csp": null },
-    "withGlobalTauri": true
+    "withGlobalTauri": true,
+    "trayIcon": {
+      "id": "main-tray",
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": false,
+      "tooltip": "DOGEEER 课表"
+    }
   },
   "bundle": {
     "active": true,

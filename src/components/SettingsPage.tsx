@@ -9,13 +9,15 @@ import { ensurePermission, playChime, type PermissionState, isTauri } from '../l
 import { currentWeek } from '../store'
 import {
   getAutoStart,
+  getTrayVisible,
   hideMainWindow,
   isDesktop,
   setAutoStart,
-  setMiniAlwaysOnTop,
+  setMiniLocked,
+  setTrayVisible,
   showMiniWindow,
 } from '../lib/desktop'
-import { setTheme, syncMiniTheme, type ThemeMode } from '../lib/theme'
+import { setTheme, type ThemeMode } from '../lib/theme'
 
 export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const settings = useApp((s) => s.settings)
@@ -34,11 +36,13 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const [confirmReset, setConfirmReset] = useState(false)
   const [autoStart, setAutoStartState] = useState<boolean | null>(null)
   const [miniOnTop, setMiniOnTopState] = useState(!!settings.miniAlwaysOnTop)
+  const [trayOn, setTrayOn] = useState(true)
   const week = currentWeek({ settings, previewWeek: null })
 
   useEffect(() => {
     if (!isDesktop()) return
     void getAutoStart().then((v) => setAutoStartState(v ?? false))
+    void getTrayVisible().then((v) => setTrayOn(v ?? false))
   }, [])
 
   const semesterProgress = useMemo(() => {
@@ -218,34 +222,41 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
                 onChange={async (v) => {
                   setMiniOnTopState(v)
                   updateSettings({ miniAlwaysOnTop: v })
-                  await setMiniAlwaysOnTop(v)
-                  toast(v ? '浮窗已固定在桌面最前' : '浮窗已取消固定', {
-                    desc: v ? '浮窗会盖在其他窗口上方' : '浮窗在桌面上，可被其他窗口覆盖',
+                  await setMiniLocked(v)
+                  toast(v ? '浮窗已固定' : '浮窗已解除固定', {
+                    desc: v ? '固定在当前位置，不能拖动；再点一次解除' : '现在可以拖动浮窗到任意位置',
                     tone: 'success',
                     duration: 2600,
                   })
                 }}
               />
               <span>
-                <span className="block text-[12.5px] font-semibold">固定在桌面最前</span>
+                <span className="block text-[12.5px] font-semibold">固定浮窗</span>
                 <span className="text-[11px] text-ink-3">
-                  关闭时浮窗就在桌面上，可被其他窗口盖住（默认）
+                  固定后停在原位置、不可拖动也不可改大小；解除固定后才能拖
                 </span>
               </span>
             </label>
 
             <label className="flex items-center gap-3">
               <Switch
-                checked={!!settings.miniFollowTheme}
-                onChange={(v) => {
-                  updateSettings({ miniFollowTheme: v })
-                  if (v) syncMiniTheme(settings.theme ?? 'dark')
+                checked={trayOn}
+                disabled={!isDesktop()}
+                onChange={async (v) => {
+                  setTrayOn(v)
+                  const r = await setTrayVisible(v)
+                  if (r == null) {
+                    toast('需要桌面版才能控制托盘', { tone: 'warn' })
+                    setTrayOn(!v)
+                    return
+                  }
+                  toast(v ? '已显示托盘图标' : '已隐藏托盘图标', { tone: 'success', duration: 2000 })
                 }}
               />
               <span>
-                <span className="block text-[12.5px] font-semibold">浮窗跟随主界面主题</span>
+                <span className="block text-[12.5px] font-semibold">在系统托盘显示</span>
                 <span className="text-[11px] text-ink-3">
-                  关闭时浮窗固定深色（默认），深色玻璃在深色桌面上更好看
+                  托盘菜单可打开主界面 / 显示隐藏浮窗 / 固定浮窗 / 退出
                 </span>
               </span>
             </label>

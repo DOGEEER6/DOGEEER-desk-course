@@ -41,13 +41,15 @@ export function setTheme(mode: ThemeMode, key: string = MAIN_THEME_KEY) {
   current = mode
   try {
     localStorage.setItem(key, mode)
+    // 主窗口切主题时同步浮窗，保证风格一致
+    if (key === MAIN_THEME_KEY) localStorage.setItem(MINI_THEME_KEY, mode)
   } catch {
     /* ignore */
   }
   apply(mode)
 }
 
-/** 把主界面的主题同步给浮窗（仅在用户开启「浮窗跟随主题」时调用） */
+/** 兼容旧调用 */
 export function syncMiniTheme(mode: ThemeMode) {
   try {
     localStorage.setItem(MINI_THEME_KEY, mode)

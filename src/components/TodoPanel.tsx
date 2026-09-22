@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { useApp } from '../store'
@@ -111,7 +111,17 @@ type FilterKey = 'open' | 'today' | 'week' | 'archive'
 /** 完成后的归档延迟：先让用户看到打勾，再收进归档 */
 const ARCHIVE_DELAY = 900
 
-export function TodoPanel({ compact = false }: { compact?: boolean }) {
+export function TodoPanel({
+  compact = false,
+  collapsed: collapsedProp,
+  onToggleCollapse,
+  onAddClick,
+}: {
+  compact?: boolean
+  collapsed?: boolean
+  onToggleCollapse?: () => void
+  onAddClick?: () => void
+}) {
   const todos = useApp((s) => s.todos)
   const courses = useApp((s) => s.courses)
   const addTodo = useApp((s) => s.addTodo)
@@ -123,16 +133,21 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
   const clearArchived = useApp((s) => s.clearArchived)
 
   const [filter, setFilter] = useState<FilterKey>('open')
-  const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [justDone, setJustDone] = useState<Set<string>>(new Set())
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [collapsedLocal, setCollapsedLocal] = useState(false)
+  const collapsed = collapsedProp ?? collapsedLocal
+  const toggleCollapse = onToggleCollapse ?? (() => setCollapsedLocal((v) => !v))
 
   useEffect(() => {
-    const onFocus = () => inputRef.current?.focus()
+    const onFocus = () => {
+      // Ctrl+K：折叠时先展开，再打开添加弹窗
+      if (collapsed) toggleCollapse()
+      window.setTimeout(() => onAddClick?.(), 60)
+    }
     window.addEventListener('lumen:focus-todo', onFocus)
     return () => window.removeEventListener('lumen:focus-todo', onFocus)
-  }, [])
+  }, [collapsed, toggleCollapse, onAddClick])
 
   const now = new Date()
 
@@ -205,28 +220,52 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
     })
   }
 
-  const submit = () => {
-    const raw = draft.trim()
-    if (!raw) return
-    const parsed = parseQuickInput(raw)
-    addTodo({ title: parsed.title, dueAt: parsed.dueAt, priority: parsed.priority })
-    setDraft('')
-    if (parsed.dueAt) {
-      const d = new Date(parsed.dueAt)
-      toast('已加入待办', {
-        desc: `DDL ${d.getMonth() + 1}月${d.getDate()}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
-        tone: 'success',
-        duration: 2200,
-      })
-    }
-  }
-
   const FILTERS: [FilterKey, string][] = [
     ['open', '进行中'],
     ['today', '今天'],
     ['week', '近 7 天'],
     ['archive', '归档'],
   ]
+
+  /** 折叠态：只显示数量 + 下一个 DDL，和「今天没有课」卡片等高 */
+  if (collapsed) {
+    const next = stats.next
+    const due = next?.dueAt ? dueLabel(next.dueAt, now) : null
+    return (
+      <div className="flex min-h-0 w-full flex-col">
+        <button
+          className="flex w-full items-center gap-3 rounded-2xl bg-surface-1 px-3.5 py-3 text-left transition-colors hover:bg-surface-2"
+          onClick={toggleCollapse}
+          data-testid="todo-expand"
+          title="展开待办与作业"
+        >
+          <div className="grid h-10 w-10 flex-none place-items-center rounded-2xl bg-[#0A84FF]/12 text-[#0A84FF]">
+            <Icon name="checkCircle" size={19} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[14px] font-bold tracking-[-0.01em]">
+                {stats.open > 0 ? `${stats.open} 项待办` : '待办已清空'}
+              </span>
+              {stats.overdue > 0 && (
+                <span className="text-[11.5px] font-semibold text-[#D62A20]">{stats.overdue} 项逾期</span>
+              )}
+            </div>
+            <div className="mt-0.5 truncate text-[11.5px] text-ink-3">
+              {next && due ? (
+                <>
+                  下一个：{next.title} · {due.text}
+                </>
+              ) : (
+                '暂无临近截止的任务'
+              )}
+            </div>
+          </div>
+          <Icon name="chevronDown" size={15} className="flex-none text-ink-4" />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className={clsx('flex min-h-0 w-full flex-col', compact && 'h-full')}>
@@ -239,6 +278,15 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
               {stats.open} 项进行中
             </span>
           )}
+          <button
+            className="ml-auto grid h-6 w-6 flex-none place-items-center rounded-lg text-ink-4 transition-colors hover:bg-surface-2 hover:text-ink"
+            onClick={toggleCollapse}
+            title="折叠起来（把空间让给课表）"
+            aria-label="折叠"
+            data-testid="todo-collapse"
+          >
+            <Icon name="chevronDown" size={15} className="rotate-180" />
+          </button>
         </div>
         <p className="mt-0.5 truncate text-[11.5px] text-ink-3">
           {stats.overdue > 0 ? (
@@ -253,25 +301,24 @@ export function TodoPanel({ compact = false }: { compact?: boolean }) {
           )}
         </p>
 
-        {/* 快速添加 */}
+        {/* 添加：点开弹窗设置内容 / 日期 / DDL */}
         <div className="mt-2.5 flex items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4">
-              <Icon name="plus" size={15} />
-            </div>
-            <input
-              ref={inputRef}
-              className="field pl-9"
-              placeholder="例如：操作系统实验报告 周五 18:00 !high"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submit()
-              }}
-            />
-          </div>
-          <button className="btn btn-primary h-9 flex-none px-4 text-[12.5px]" onClick={submit}>
-            添加
+          <button
+            className="btn btn-primary h-9 flex-1 text-[12.5px]"
+            onClick={() => onAddClick?.()}
+            data-testid="todo-add"
+          >
+            <Icon name="plus" size={14} />
+            添加待办 / 作业
+          </button>
+          <button
+            className="btn btn-ghost h-9 flex-none px-3 text-[12px]"
+            onClick={() => {
+              setFilter('archive')
+            }}
+            title="查看归档"
+          >
+            归档{stats.archived > 0 ? ` ${stats.archived}` : ''}
           </button>
         </div>
 

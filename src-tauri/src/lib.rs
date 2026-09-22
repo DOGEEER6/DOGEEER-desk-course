@@ -1,8 +1,22 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{Manager, WebviewWindow};
+use std::sync::Mutex;
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WebviewWindow,
+};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+
+/// 浮窗是否「固定」（置顶 + 不可拖动）
+static MINI_LOCKED: Mutex<bool> = Mutex::new(false);
+/// 托盘图标是否可见
+static TRAY_VISIBLE: Mutex<bool> = Mutex::new(true);
+
+/* ------------------------------------------------------------------ */
+/* 崩溃日志                                                            */
+/* ------------------------------------------------------------------ */
 
 /// 把 panic 写进日志，避免 release 版「闪一下就没了」却查不到原因
 fn install_panic_logger() {
@@ -12,21 +26,20 @@ fn install_panic_logger() {
     std::panic::set_hook(Box::new(move |info| {
         use std::io::Write;
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-            let _ = writeln!(f, "[{}] {}", chrono_like_now(), info);
+            let _ = writeln!(f, "[{}] {}", unix_now(), info);
         }
     }));
 }
 
-/// 极简时间戳，避免额外依赖
-fn chrono_like_now() -> String {
+fn unix_now() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(d) => format!("unix={}", d.as_secs()),
-        Err(_) => "unix=?".to_string(),
-    }
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-/// 应用版本
+/* ------------------------------------------------------------------ */
+/* 命令                                                                */
+/* ------------------------------------------------------------------ */
+
 #[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -80,7 +93,7 @@ fn hide_mini(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 浮窗是否置顶
+/// 浮窗是否固定在桌面最前
 #[tauri::command]
 fn set_mini_always_on_top(app: tauri::AppHandle, on_top: bool) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("mini") {
@@ -89,15 +102,24 @@ fn set_mini_always_on_top(app: tauri::AppHandle, on_top: bool) -> Result<(), Str
     Ok(())
 }
 
+/// 固定 / 解除固定：固定后浮窗停在原地，不能拖动也不能改大小
+#[tauri::command]
+fn set_mini_locked(app: tauri::AppHandle, locked: bool) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("mini") {
+        win.set_always_on_top(locked).map_err(|e| e.to_string())?;
+        win.set_resizable(!locked).map_err(|e| e.to_string())?;
+    }
+    if let Ok(mut guard) = MINI_LOCKED.lock() {
+        *guard = locked;
+    }
+    Ok(())
+}
+
 /// 开机自启开关
 #[tauri::command]
 fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
     let manager = app.autolaunch();
-    let r = if enabled {
-        manager.enable()
-    } else {
-        manager.disable()
-    };
+    let r = if enabled { manager.enable() } else { manager.disable() };
     r.map_err(|e| e.to_string())?;
     manager.is_enabled().map_err(|e| e.to_string())
 }
@@ -106,6 +128,104 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
 fn get_autostart(app: tauri::AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
+
+/// 托盘图标是否可见
+#[tauri::command]
+fn set_tray_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_visible(visible).map_err(|e| e.to_string())?;
+    }
+    if let Ok(mut guard) = TRAY_VISIBLE.lock() {
+        *guard = visible;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_tray_visible() -> bool {
+    TRAY_VISIBLE.lock().map(|g| *g).unwrap_or(true)
+}
+
+/* ------------------------------------------------------------------ */
+/* 托盘                                                                */
+/* ------------------------------------------------------------------ */
+
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show_main = MenuItemBuilder::with_id("show-main", "打开完整课表").build(app)?;
+    let toggle_mini = MenuItemBuilder::with_id("toggle-mini", "显示 / 隐藏浮窗").build(app)?;
+    let pin_mini = MenuItemBuilder::with_id("pin-mini", "固定浮窗 / 解除固定").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "退出 DOGEEER 课表").build(app)?;
+
+    let menu = MenuBuilder::new(app)
+        .item(&show_main)
+        .item(&toggle_mini)
+        .item(&pin_mini)
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().cloned().ok_or_else(|| {
+            tauri::Error::AssetNotFound("default window icon missing".into())
+        })?)
+        .tooltip("DOGEEER 课表")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show-main" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.unminimize();
+                    let _ = w.set_focus();
+                }
+            }
+            "toggle-mini" => {
+                if let Some(w) = app.get_webview_window("mini") {
+                    let visible = w.is_visible().unwrap_or(false);
+                    if visible {
+                        let _ = w.hide();
+                    } else {
+                        let _ = w.show();
+                    }
+                }
+            }
+            "pin-mini" => {
+                if let Some(w) = app.get_webview_window("mini") {
+                    let next = !MINI_LOCKED.lock().map(|g| *g).unwrap_or(false);
+                    let _ = w.set_always_on_top(next);
+                    let _ = w.set_resizable(!next);
+                    if let Ok(mut guard) = MINI_LOCKED.lock() {
+                        *guard = next;
+                    }
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            // 左键单击：把主窗口唤到前台
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.unminimize();
+                    let _ = w.set_focus();
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
+/* ------------------------------------------------------------------ */
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -122,9 +242,6 @@ pub fn run() {
                     let _ = main.show();
                     let _ = main.unminimize();
                     let _ = main.set_focus();
-                }
-                if let Some(mini) = app.get_webview_window("mini") {
-                    let _ = mini.set_always_on_top(false);
                 }
             }
         }))
@@ -143,13 +260,17 @@ pub fn run() {
             set_mini_visible,
             hide_mini,
             set_mini_always_on_top,
+            set_mini_locked,
             set_autostart,
-            get_autostart
+            get_autostart,
+            set_tray_visible,
+            get_tray_visible
         ])
         .setup(|app| {
-            // 浮窗：不置顶（在桌面上就行），并使用 Windows 11 的 Mica 材质做毛玻璃
+            // 浮窗：不置顶、可拖动（在桌面上就行）
             if let Some(mini) = app.get_webview_window("mini") {
                 let _ = mini.set_always_on_top(false);
+                let _ = mini.set_resizable(true);
                 #[cfg(target_os = "windows")]
                 {
                     use tauri::window::{Effect, EffectState, EffectsBuilder};
@@ -161,6 +282,8 @@ pub fn run() {
                     );
                 }
             }
+            // 托盘常驻
+            setup_tray(app.handle())?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -171,7 +294,7 @@ pub fn run() {
                         api.prevent_close();
                         let _ = window.hide();
                     }
-                    // 浮窗的 × 只是隐藏，不要退出整个应用
+                    // 浮窗的 × 只是隐藏，不要退出整个应用（托盘里能再打开）
                     "mini" => {
                         api.prevent_close();
                         let _ = window.hide();

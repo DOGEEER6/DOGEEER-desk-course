@@ -58,6 +58,7 @@
   --c-glass-thin: rgba(255, 255, 255, 0.66);
   --c-glass-panel: rgba(255, 255, 255, 0.94);
   --c-glass-panel-thin: rgba(255, 255, 255, 0.82);
+  --c-pane: rgba(255, 255, 255, 0.42);
   --c-glass-border: rgba(255, 255, 255, 0.72);
   --c-glass-border-thin: rgba(255, 255, 255, 0.58);
   --glass-blur: 30px;
@@ -107,6 +108,7 @@
   --c-glass-thin: rgba(22, 26, 34, 0.55);
   --c-glass-panel: rgba(22, 26, 34, 0.96);
   --c-glass-panel-thin: rgba(22, 26, 34, 0.84);
+  --c-pane: rgba(14, 17, 23, 0.42);
   --c-glass-border: rgba(255, 255, 255, 0);
   --c-glass-border-thin: rgba(255, 255, 255, 0);
   --glass-blur: 34px;
@@ -140,12 +142,12 @@
 
 /* 娴獥浣跨敤鏇村己鐨勯€氶€忔劅 */
 .frost {
-  --glass-blur: 40px;
-  --glass-sat: 210%;
+  --glass-blur: 56px;
+  --glass-sat: 230%;
 }
 [data-theme='dark'] .frost {
-  --glass-blur: 46px;
-  --glass-sat: 190%;
+  --glass-blur: 60px;
+  --glass-sat: 200%;
 }
 
 /* ------------------------------------------------------------------ */
@@ -261,6 +263,10 @@ textarea {
 .no-drag {
   -webkit-app-region: no-drag;
 }
+/* 固定浮窗后不响应拖动 */
+.lock-handle {
+  -webkit-app-region: no-drag;
+}
 
 /* ------------------------------------------------------------------ */
 /* 鏉愯川                                                                */
@@ -281,7 +287,7 @@ textarea {
 
 /* 娴獥涓诲崱鐗囷細閫忓嚭绐楀彛鏈韩鐨?Mica/浜氬厠鍔涙潗璐紝鍙湁涓€灞傚緢娣＄殑鏆楄壊鑶?+ 椤堕儴楂樺厜 */
 .frost-card {
-  background: var(--c-glass);
+  background: var(--c-pane);
   backdrop-filter: saturate(var(--glass-sat)) blur(var(--glass-blur));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
@@ -677,4 +683,5 @@ body[data-resizing='true'] {
     transition-duration: 0.01ms !important;
   }
 }
+
 
