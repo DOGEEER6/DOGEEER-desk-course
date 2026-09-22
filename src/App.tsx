@@ -396,7 +396,7 @@ export default function App() {
                             </span>
                             {previewWeek != null && previewWeek !== realWeek && (
                               <span className="rounded-full bg-[#FF9F0A]/16 px-2 py-[1px] text-[10.5px] font-bold text-[#96590A]">
-                                预览中
+                                预览中 · 本周是第 {realWeek} 周
                               </span>
                             )}
                           </div>
@@ -405,11 +405,25 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* 始终可见的返回入口：不管跳到哪一周都能一键回本周 */}
                         {previewWeek != null && previewWeek !== realWeek && (
-                          <button className="btn btn-ghost h-8 px-3 text-[12px]" onClick={() => setPreviewWeek(null)}>
+                          <button
+                            className="btn h-8 bg-[#0A84FF] px-3 text-[12px] text-white"
+                            onClick={() => setPreviewWeek(null)}
+                            data-testid="back-to-now"
+                          >
+                            <Icon name="sun" size={13} />
                             回到本周
                           </button>
                         )}
+                        <button
+                          className="btn btn-ghost h-8 px-3 text-[12px]"
+                          onClick={() => setJumpOpen(true)}
+                          title="按周次跳转"
+                        >
+                          <Icon name="search" size={13} />
+                          跳转周次
+                        </button>
                         <Segmented<CalView>
                           value={calView}
                           onChange={setCalView}
@@ -762,19 +776,36 @@ function WeekJumpDialog({
 }) {
   const settings = useApp((s) => s.settings)
   const [value, setValue] = useState(String(current))
+  const realWeek = currentWeek({ settings, previewWeek: null })
   useEffect(() => setValue(String(current)), [current, open])
   return (
     <Overlay open={open} onClose={onClose} align="center">
       <div className="w-[420px] max-w-[92vw] rounded-[26px] border border-glass-line bg-glass p-5 shadow-[var(--shadow-float)] backdrop-blur-2xl">
-        <h3 className="text-[16px] font-bold tracking-[-0.02em]">跳转到教学周</h3>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[16px] font-bold tracking-[-0.02em]">跳转到教学周</h3>
+            <p className="mt-0.5 text-[11.5px] text-ink-3">
+              当前查看第 {current} 周 · 本周是第 {realWeek} 周
+            </p>
+          </div>
+          <button className="btn h-8 w-8 bg-surface-2 text-ink-2" onClick={onClose} aria-label="关闭">
+            <Icon name="close" size={15} />
+          </button>
+        </div>
+
         <div className="mt-3 grid grid-cols-5 gap-1.5">
           {Array.from({ length: total }, (_, i) => i + 1).map((w) => (
             <button
               key={w}
+              data-testid={`week-${w}`}
               onClick={() => onPick(w)}
               className={clsx(
                 'tabular rounded-xl py-2 text-[12.5px] font-semibold transition-colors',
-                w === current ? 'bg-[#0A84FF] text-white' : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
+                w === current
+                  ? 'bg-[#0A84FF] text-white'
+                  : w === realWeek
+                    ? 'bg-[#0A84FF]/14 text-[#0A84FF]'
+                    : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
               )}
             >
               {w}
@@ -785,12 +816,18 @@ function WeekJumpDialog({
             </button>
           ))}
         </div>
+
         <div className="mt-4 flex items-center gap-2">
           <input
             type="number"
             className="field w-[100px]"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onPick(Math.max(1, Math.min(total, Number(value) || 1)))
+              }
+            }}
           />
           <button
             className="btn btn-primary h-9 px-4 text-[12.5px]"
@@ -801,8 +838,13 @@ function WeekJumpDialog({
           >
             跳转
           </button>
-          <button className="btn btn-ghost h-9 px-4 text-[12.5px]" onClick={() => onPick(currentWeek({ settings, previewWeek: null }))}>
-            回到本周
+          <button
+            className="btn btn-ghost ml-auto h-9 px-4 text-[12.5px]"
+            onClick={() => onPick(realWeek)}
+            data-testid="jump-back-now"
+          >
+            <Icon name="sun" size={14} />
+            回到本周（第 {realWeek} 周）
           </button>
         </div>
       </div>

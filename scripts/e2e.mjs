@@ -309,8 +309,19 @@ const cardCount2 = await evaluate(`return document.querySelectorAll('.tt-card').
 check('第 2 周卡片数量与周次相关', cardCount2 > 0, `cards=${cardCount2}`)
 await shot('02-week2')
 
-await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 't' })); return 'ok'`)
-await new Promise((r) => setTimeout(r, 700))
+// 跳转到第 8 周，再用「回到本周」返回（此前缺返回入口）
+await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('跳转周次'))?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 800))
+check('周次跳转弹窗可打开', /跳转到教学周/.test(await evaluate(`return document.body.innerText`)))
+check('弹窗内有回到本周', await evaluate(`return !!document.querySelector('[data-testid="jump-back-now"]')`))
+await evaluate(`document.querySelector('[data-testid="week-8"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 900))
+check('可跳转到第 8 周', /第 8 教学周/.test(await evaluate(`return document.body.innerText`)))
+check('跳转后工具栏出现回到本周', await evaluate(`return !!document.querySelector('[data-testid="back-to-now"]')`))
+await shot('03b-week8')
+await evaluate(`document.querySelector('[data-testid="back-to-now"]')?.click(); return 'ok'`)
+await new Promise((r) => setTimeout(r, 800))
+check('点回到本周后不再预览', !/预览中/.test(await evaluate(`return document.body.innerText`)))
 
 // 打开课程详情（真实鼠标事件）
 await evaluate(`window.scrollTo(0, 0); document.querySelector('main .scroll-y')?.scrollTo(0, 0); return 'ok'`)

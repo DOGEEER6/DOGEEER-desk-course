@@ -59,8 +59,8 @@
   --c-glass-panel: rgba(255, 255, 255, 0.94);
   --c-glass-panel-thin: rgba(255, 255, 255, 0.82);
   --c-pane: rgba(255, 255, 255, 0.34);
-  --c-panel: rgba(255, 255, 255, 0.5);
-  --c-panel-strong: rgba(255, 255, 255, 0.62);
+  --c-panel: rgba(255, 255, 255, 0.66);
+  --c-panel-strong: rgba(255, 255, 255, 0.86);
   --c-panel-line: rgba(255, 255, 255, 0.6);
   --c-glass-border: rgba(255, 255, 255, 0.72);
   --c-glass-border-thin: rgba(255, 255, 255, 0.58);
@@ -305,10 +305,17 @@ textarea {
 }
 
 .mini-panel-header {
-  background: linear-gradient(180deg, var(--c-panel-strong), transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  mask-image: linear-gradient(180deg, #000 62%, transparent);
-  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent);
+  /* 渐变要够长够深，否则深色桌面壁纸下顶部文字会看不清 */
+  background: linear-gradient(
+    180deg,
+    var(--c-panel-strong) 0%,
+    var(--c-panel) 55%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  backdrop-filter: blur(22px) saturate(150%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 72%, transparent 100%);
+  padding-bottom: 18px;
 }
 
 .mini-panel-footer {
