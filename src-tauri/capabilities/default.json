@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "Lumen 课程表默认权限",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-focused",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "opener:default",
+    "notification:default"
+  ]
+}

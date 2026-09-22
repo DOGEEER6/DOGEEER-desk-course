@@ -1,0 +1,20 @@
+# Lumen 课程表 · Cargo 配置（国内镜像 + MinGW 链接器）
+# 由构建脚本生成，可安全删除或修改
+
+[source.crates-io]
+replace-with = 'tuna'
+
+[source.tuna]
+registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
+
+[net]
+git-fetch-with-cli = true
+retry = 3
+
+[target.x86_64-pc-windows-gnu]
+linker = "C:/msys64/mingw64/bin/gcc.exe"
+ar = "C:/msys64/mingw64/bin/ar.exe"
+
+[build]
+# 让增量编译更快
+incremental = true

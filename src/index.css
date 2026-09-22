@@ -1,0 +1,437 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Segoe UI',
+    system-ui, sans-serif;
+  --color-ink: #0b1220;
+  --color-ink-2: #3d4658;
+  --color-ink-3: #6b7688;
+  --color-ink-4: #9aa4b5;
+  --color-line: rgba(15, 23, 42, 0.07);
+  --color-line-strong: rgba(15, 23, 42, 0.12);
+  --color-accent: #0a84ff;
+  --color-accent-soft: #e8f2ff;
+  --radius-card: 22px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.16);
+  --shadow-float: 0 2px 6px rgba(15, 23, 42, 0.06), 0 24px 60px -20px rgba(15, 23, 42, 0.32);
+}
+
+/* ------------------------------------------------------------------ */
+/* 基础                                                                */
+/* ------------------------------------------------------------------ */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: #eef1f7;
+  overflow: hidden;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+/* 背景：两个柔和光斑，营造 iOS 的通透感 */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(1200px 700px at 8% -10%, rgba(10, 132, 255, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, rgba(175, 82, 222, 0.14), transparent 55%),
+    radial-gradient(1000px 800px at 60% 120%, rgba(52, 199, 89, 0.1), transparent 60%),
+    linear-gradient(180deg, #f7f9fd 0%, #eef1f7 100%);
+}
+
+/* ------------------------------------------------------------------ */
+/* 材质                                                                */
+/* ------------------------------------------------------------------ */
+
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-soft);
+}
+
+.glass-thin {
+  background: rgba(255, 255, 255, 0.56);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.hairline {
+  border: 1px solid var(--color-line);
+}
+
+/* ------------------------------------------------------------------ */
+/* 滚动条：细、圆、悬停才明显                                            */
+/* ------------------------------------------------------------------ */
+
+.scroll-y {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.scroll-x {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.14);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.28);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------------ */
+/* 控件                                                                */
+/* ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  transition:
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    opacity 0.18s ease;
+}
+.btn:active {
+  transform: scale(0.955);
+}
+.btn-primary {
+  background: linear-gradient(180deg, #3aa0ff, #0a84ff);
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 6px 18px -8px rgba(10, 132, 255, 0.9);
+}
+.btn-primary:hover {
+  filter: brightness(1.04);
+}
+.btn-ghost {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--color-ink-2);
+}
+.btn-ghost:hover {
+  background: rgba(15, 23, 42, 0.09);
+}
+
+.field {
+  width: 100%;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.045);
+  border: 1px solid transparent;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: var(--color-ink);
+  outline: none;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.field::placeholder {
+  color: var(--color-ink-4);
+}
+.field:focus {
+  background: #fff;
+  border-color: rgba(10, 132, 255, 0.5);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.14);
+}
+
+/* iOS 分段控件 */
+.segmented {
+  position: relative;
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 11px;
+  background: rgba(120, 130, 150, 0.14);
+}
+.segmented > button {
+  position: relative;
+  z-index: 1;
+  border-radius: 9px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+  transition: color 0.2s ease;
+}
+.segmented > button[data-active='true'] {
+  color: var(--color-ink);
+}
+.segmented-thumb {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+}
+
+/* iOS 开关 */
+.switch {
+  position: relative;
+  width: 47px;
+  height: 29px;
+  border-radius: 999px;
+  background: rgba(120, 130, 150, 0.3);
+  transition: background 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  flex: none;
+}
+.switch[data-on='true'] {
+  background: #34c759;
+}
+.switch > span {
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.28);
+  transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.switch[data-on='true'] > span {
+  transform: translateX(18px);
+}
+
+/* 复选框 */
+.checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1.8px solid rgba(120, 130, 150, 0.5);
+  display: grid;
+  place-items: center;
+  flex: none;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+  cursor: pointer;
+}
+.checkbox:hover {
+  border-color: var(--color-accent);
+}
+.checkbox[data-done='true'] {
+  background: linear-gradient(180deg, #4cd964, #34c759);
+  border-color: transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* 课表网格                                                            */
+/* ------------------------------------------------------------------ */
+
+.tt-grid-lines {
+  background-image: linear-gradient(to right, var(--color-line) 1px, transparent 1px);
+  background-size: calc(100% / 7) 100%;
+}
+
+.tt-card {
+  border-radius: 14px;
+  padding: 7px 9px;
+  overflow: hidden;
+  will-change: transform;
+  touch-action: none;
+  border: 1px solid transparent;
+  transition:
+    box-shadow 0.22s ease,
+    border-color 0.22s ease,
+    filter 0.22s ease;
+}
+.tt-card:hover {
+  filter: brightness(1.015);
+  box-shadow: 0 8px 22px -12px rgba(15, 23, 42, 0.5);
+}
+.tt-card[data-dragging='true'] {
+  box-shadow: var(--shadow-float);
+  z-index: 40;
+}
+.tt-card[data-dim='true'] {
+  opacity: 0.32;
+  filter: saturate(0.4);
+}
+.tt-card[data-now='true'] {
+  border-color: rgba(10, 132, 255, 0.55);
+}
+
+.resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 11px;
+  cursor: ns-resize;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 3;
+}
+.tt-card:hover .resize-handle {
+  opacity: 1;
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+}
+.resize-handle.top {
+  top: 3px;
+}
+.resize-handle.top::after {
+  top: 0;
+}
+.resize-handle.bottom {
+  bottom: 3px;
+}
+.resize-handle.bottom::after {
+  bottom: 0;
+}
+
+/* 吸附辅助线 */
+.snap-guide {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  border-radius: 999px;
+  background: rgba(10, 132, 255, 0.14);
+  box-shadow: inset 0 0 0 1.5px rgba(10, 132, 255, 0.6);
+}
+
+/* ------------------------------------------------------------------ */
+/* 动画                                                                */
+/* ------------------------------------------------------------------ */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-pop {
+  animation: pop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-14%);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(20%);
+    opacity: 1;
+  }
+}
+
+.now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 59, 48, 0), #ff3b30 18%, #ff3b30 82%, rgba(255, 59, 48, 0));
+  z-index: 25;
+  pointer-events: none;
+}
+.now-line::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ff3b30;
+  box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.18);
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(255, 59, 48, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
+  }
+}
+.live-dot {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* 拖拽时全局光标 */
+body[data-dragging='true'] {
+  cursor: grabbing;
+}
+body[data-resizing='true'] {
+  cursor: ns-resize;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
