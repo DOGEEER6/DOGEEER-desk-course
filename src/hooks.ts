@@ -85,9 +85,19 @@ export function findCurrentClass(list: UpcomingClass[], now: Date) {
 /* ------------------------------------------------------------------ */
 
 const firedKeys = new Set<string>()
+let firedDay = ''
 
 function firedKey(kind: string, id: string, extra = '') {
   return `${kind}:${id}:${extra}`
+}
+
+/** 跨天时清空已提醒记录，避免 Set 无限增长 */
+function rollDay(now: Date) {
+  const day = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`
+  if (day !== firedDay) {
+    firedDay = day
+    firedKeys.clear()
+  }
 }
 
 /**
@@ -108,6 +118,7 @@ export function useReminderEngine() {
       const cfg = useApp.getState().settings.reminders
       if (!cfg.enabled) return
       const now = new Date()
+      rollDay(now)
       const week = weekIndexOf(useApp.getState().settings.semester.startDate, now)
       const weekday = now.getDay() === 0 ? 7 : now.getDay()
       const nowMin = now.getHours() * 60 + now.getMinutes()
@@ -130,7 +141,7 @@ export function useReminderEngine() {
 
           const when = delta <= 0 ? '现在开始上课' : `${delta} 分钟后上课`
           const where = s.room ?? c.room ?? '未填地点'
-          playChime('bell')
+          if (cfg.sound) playChime('bell')
           if (cfg.inApp) {
             toast(`⏰ ${c.name}`, {
               desc: `${when} · 第 ${s.startPeriod}-${s.endPeriod} 节 · ${where}`,
@@ -158,7 +169,7 @@ export function useReminderEngine() {
         const key = firedKey('todo', t.id, stage)
         if (firedKeys.has(key)) continue
         firedKeys.add(key)
-        playChime('bell')
+        if (cfg.sound) playChime('bell')
         if (cfg.inApp) {
           toast(`📌 ${t.title}`, {
             desc: ms < 0 ? `已逾期 ${humanLeft(ms)}` : `${humanLeft(ms)}后到期`,

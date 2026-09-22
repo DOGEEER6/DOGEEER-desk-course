@@ -5,6 +5,7 @@ import type { Course, Session, Weekday } from '../types'
 import { WEEKDAY_LABELS } from '../types'
 import { colorOf } from '../lib/palette'
 import { parseHM, sessionCoversWeek, weekRangeText } from '../lib/time'
+import { isDragGesture, snapDrag } from '../lib/snap'
 import { Icon, springSnappy } from './ui'
 import { motion } from 'framer-motion'
 
@@ -78,43 +79,20 @@ export function Timetable({ week, showWeekend, onOpenCourse, onAddAt }: Timetabl
       const rect = host.getBoundingClientRect()
       const dx = e.clientX - drag.startX
       const dy = e.clientY - drag.startY
-      const moved = drag.moved || Math.hypot(dx, dy) > 5
+      const moved = drag.moved || isDragGesture(dx, dy)
 
-      // 以卡片中心（移动）或指针（拉伸）计算吸附目标
-      const span = drag.session.endPeriod - drag.session.startPeriod + 1
-      const colW = rect.width / days.length
-      const dayIdxRaw =
-        drag.mode === 'move'
-          ? drag.session.day - 1 + Math.round(dx / colW)
-          : Math.floor((e.clientX - rect.left) / colW)
-      const dayIdx = Math.max(0, Math.min(days.length - 1, dayIdxRaw))
-      const day = days[dayIdx]
+      const next = snapDrag({
+        mode: drag.mode,
+        session: drag.session,
+        dx: drag.mode === 'move' ? dx : 0,
+        dy,
+        colWidth: rect.width / days.length,
+        rowHeight: PERIOD_H,
+        days,
+        totalPeriods,
+      })
 
-      let startPeriod = drag.session.startPeriod
-      let endPeriod = drag.session.endPeriod
-      if (drag.mode === 'move') {
-        const shift = Math.round(dy / PERIOD_H)
-        startPeriod = drag.session.startPeriod + shift
-        endPeriod = startPeriod + span - 1
-        if (startPeriod < 1) {
-          startPeriod = 1
-          endPeriod = span
-        }
-        if (endPeriod > totalPeriods) {
-          endPeriod = totalPeriods
-          startPeriod = totalPeriods - span + 1
-        }
-      } else if (drag.mode === 'resize-end') {
-        endPeriod = drag.session.endPeriod + Math.round(dy / PERIOD_H)
-        endPeriod = Math.max(drag.session.startPeriod, Math.min(totalPeriods, endPeriod))
-      } else {
-        startPeriod = drag.session.startPeriod + Math.round(dy / PERIOD_H)
-        startPeriod = Math.min(drag.session.endPeriod, Math.max(1, startPeriod))
-      }
-
-      setDrag((d) =>
-        d ? { ...d, dx, dy, moved, target: { day, startPeriod, endPeriod } } : d,
-      )
+      setDrag((d) => (d ? { ...d, dx, dy, moved, target: next } : d))
     }
 
     const onUp = () => {

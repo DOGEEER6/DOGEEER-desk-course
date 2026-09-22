@@ -324,9 +324,16 @@ export default function App() {
                           回到本周
                         </button>
                       )}
-                      <span className="rounded-full bg-slate-900/[0.05] px-3 py-1.5 text-[11.5px] font-semibold text-ink-3">
-                        周视图
-                      </span>
+                      <div className="flex items-center gap-2 rounded-full bg-slate-900/[0.05] px-3 py-1.5">
+                        <span className="tabular text-[12.5px] font-bold tracking-[-0.01em] text-ink-2">
+                          {pad2(now.getHours())}:{pad2(now.getMinutes())}
+                          <span className="ml-0.5 text-[10.5px] font-semibold text-ink-4">
+                            {pad2(now.getSeconds())}
+                          </span>
+                        </span>
+                        <span className="h-3 w-px bg-line-strong" />
+                        <span className="text-[11.5px] font-semibold text-ink-3">周视图</span>
+                      </div>
                     </div>
                   </div>
 

@@ -74,6 +74,56 @@ console.log('\n[dueLabel]')
 const dl = time.dueLabel(new Date(2026, 8, 10, 18, 0).toISOString(), new Date(2026, 8, 10, 9, 0))
 check('今天截止', dl.tone === 'today', dl.text)
 
+/* ---------------- snap.ts ---------------- */
+const snap = await load('src/lib/snap.ts')
+const DAYS = [1, 2, 3, 4, 5]
+const base = {
+  session: { day: 2, startPeriod: 3, endPeriod: 4 },
+  colWidth: 100,
+  rowHeight: 68,
+  days: DAYS,
+  totalPeriods: 13,
+}
+const S = (o) => snap.snapDrag({ mode: 'move', dx: 0, dy: 0, ...base, ...o })
+
+console.log('\n[snapDrag / move]')
+check('不动 → 原地', JSON.stringify(S({})) === '{"day":2,"startPeriod":3,"endPeriod":4}')
+check('右移一格 → 周三', S({ dx: 100 }).day === 3)
+check('右移不到半格 → 仍是周二', S({ dx: 40 }).day === 2)
+check('右移超过一格半 → 周四', S({ dx: 160 }).day === 4)
+check('下移一格 → 4-5 节', JSON.stringify([S({ dy: 68 }).startPeriod, S({ dy: 68 }).endPeriod]) === '[4,5]')
+check('时长保持不变', S({ dy: 68 }).endPeriod - S({ dy: 68 }).startPeriod === 1)
+check('上移超过顶部 → 夹到 1-2 节', JSON.stringify([S({ dy: -680 }).startPeriod, S({ dy: -680 }).endPeriod]) === '[1,2]')
+check(
+  '下移超过底部 → 夹到 12-13 节',
+  JSON.stringify([S({ dy: 9999 }).startPeriod, S({ dy: 9999 }).endPeriod]) === '[12,13]',
+)
+check('左移超过第一列 → 夹到周一且保留节次', JSON.stringify([S({ dx: -999 }).day, S({ dx: -999 }).startPeriod]) === '[1,3]')
+check('右移超过最后一列 → 夹到周五', S({ dx: 9999 }).day === 5)
+
+console.log('\n[snapDrag / resize]')
+check(
+  '向下拉长一格 → 3-5 节',
+  JSON.stringify([S({ mode: 'resize-end', dy: 68 }).startPeriod, S({ mode: 'resize-end', dy: 68 }).endPeriod]) === '[3,5]',
+)
+check('向下缩短一格 → 3-3 节', JSON.stringify([S({ mode: 'resize-end', dy: -68 }).endPeriod]) === '[3]')
+check(
+  '结束节次不会小于起始节次',
+  S({ mode: 'resize-end', dy: -999 }).endPeriod === 3,
+)
+check('结束节次不会超过总节次', S({ mode: 'resize-end', dy: 999 }).endPeriod === 13)
+check(
+  '向上拉长一格 → 2-4 节',
+  JSON.stringify([S({ mode: 'resize-start', dy: -68 }).startPeriod, S({ mode: 'resize-start', dy: -68 }).endPeriod]) === '[2,4]',
+)
+check('起始节次不会大于结束节次', S({ mode: 'resize-start', dy: 999 }).startPeriod === 4)
+check('起始节次不会小于 1', S({ mode: 'resize-start', dy: -999 }).startPeriod === 1)
+check('拉伸不改星期', S({ mode: 'resize-end', dx: 500 }).day === 2)
+
+console.log('\n[isDragGesture]')
+check('微小抖动不算拖动', snap.isDragGesture(2, 2) === false)
+check('明显位移算拖动', snap.isDragGesture(9, 0) === true)
+
 /* ---------------- excel.ts ---------------- */
 const file = process.argv[2]
 if (file) {
