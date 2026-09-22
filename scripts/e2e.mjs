@@ -269,7 +269,7 @@ await new Promise((r) => setTimeout(r, 1200))
 const json = JSON.stringify(payload)
 await evaluate(`
   // 重置浮窗主题到默认（深色），避免上一次测试遗留影响断言
-  localStorage.setItem('lumen-mini-theme', 'dark');
+  localStorage.setItem('lumen-mini-theme', 'light');
   localStorage.setItem('lumen-course-v1', ${JSON.stringify(json)});
   return 'ok';
 `)
@@ -295,7 +295,7 @@ check('卡片含课程名', Array.isArray(courseNames) && courseNames.length > 0
 const visibleText = await evaluate(`return document.body.innerText`)
 check('侧栏显示第 1 教学周', /第 1 教学周/.test(visibleText))
 check('待办面板显示 DDL 状态', /逾期|截止|项未完成/.test(visibleText))
-check('统计出未完成数量', /项进行中|项未完成/.test(visibleText))
+check('统计出未完成数量', /项进行中|项未完成|项待办|待办已清空/.test(visibleText))
 check('今日 Hero 正常', /下一节课|正在上课|今天没有课/.test(visibleText))
 
 await shot('01-timetable')
@@ -313,6 +313,8 @@ await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 't' }))
 await new Promise((r) => setTimeout(r, 700))
 
 // 打开课程详情（真实鼠标事件）
+await evaluate(`window.scrollTo(0, 0); document.querySelector('main .scroll-y')?.scrollTo(0, 0); return 'ok'`)
+await new Promise((r) => setTimeout(r, 400))
 await clickSelector('.tt-card', 0)
 await new Promise((r) => setTimeout(r, 1000))
 const drawerText = await evaluate(`return document.body.innerText`)
@@ -371,8 +373,15 @@ await new Promise((r) => setTimeout(r, 3200))
 await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' })); return 'ok'`)
 await new Promise((r) => setTimeout(r, 800))
 
-const collapseBtn = await evaluate(`return !!document.querySelector('[data-testid="todo-collapse"]')`)
-check('待办面板有折叠按钮', collapseBtn)
+const collapsedByDefault = await evaluate(`return !!document.querySelector('[data-testid="todo-expand"]')`)
+check('待办卡片默认折叠', collapsedByDefault)
+check('折叠卡片与「今天没有课」等高', await evaluate(`
+  const hero = document.querySelector('main .flex.flex-none > .flex.min-w-0.flex-1');
+  const card = document.querySelector('[data-testid="todo-expand"]')?.closest('.glass');
+  if (!hero || !card) return false;
+  return Math.abs(hero.getBoundingClientRect().height - card.getBoundingClientRect().height) < 12;
+`))
+const collapseBtn = collapsedByDefault
 await evaluate(`document.querySelector('[data-testid="todo-collapse"]')?.click(); return 'ok'`)
 await new Promise((r) => setTimeout(r, 700))
 const collapsedText = await evaluate(`

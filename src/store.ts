@@ -40,8 +40,8 @@ export const defaultSettings: AppSettings = {
   miniAlwaysOnTop: false,
   /** 浮窗默认固定深色，不跟随主界面 */
   miniFollowTheme: false,
-  /** 默认深色 */
-  theme: 'dark',
+  /** 默认浅色 */
+  theme: 'light',
 }
 
 interface AppState {

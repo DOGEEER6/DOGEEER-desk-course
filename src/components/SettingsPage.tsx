@@ -301,7 +301,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
         {/* 外观 */}
         <Card title="颜色模式" icon="sparkle">
           <Segmented<ThemeMode>
-            value={settings.theme ?? 'dark'}
+            value={settings.theme ?? 'light'}
             onChange={(v) => {
               setTheme(v)
               updateSettings({ theme: v })
@@ -311,13 +311,13 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
               )
             }}
             options={[
-              { value: 'dark', label: '深色' },
               { value: 'light', label: '浅色' },
+              { value: 'dark', label: '深色' },
               { value: 'system', label: '跟随系统' },
             ]}
           />
           <p className="mt-2.5 text-[11px] leading-5 text-ink-4">
-            默认深色，适合深色桌面壁纸；浮窗会跟随这个选择（切到浅色时浮窗也是浅色玻璃）。
+            默认浅色。浮窗会跟随这个选择，切主题后两边一起变。
           </p>
         </Card>
 

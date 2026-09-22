@@ -45,7 +45,7 @@ export default function App() {
   const [jumpOpen, setJumpOpen] = useState(false)
   const [newCourse, setNewCourse] = useState<{ day: Weekday; start: number; end: number } | null>(null)
   const [calView, setCalView] = useState<CalView>('week')
-  const [todoCollapsed, setTodoCollapsed] = useState(false)
+  const [todoCollapsed, setTodoCollapsed] = useState(true)
   const [todoDialogOpen, setTodoDialogOpen] = useState(false)
   const [addCourseOpen, setAddCourseOpen] = useState(false)
   const [trayDrag, setTrayDrag] = useState<{
@@ -56,7 +56,7 @@ export default function App() {
   } | null>(null)
 
   /** 主题：默认深色；设置页可改，改完立即写入并持久化（同时同步浮窗） */
-  const settingsTheme = settings.theme ?? 'dark'
+  const settingsTheme = settings.theme ?? 'light'
   useEffect(() => {
     setTheme(settingsTheme, MAIN_THEME_KEY)
   }, [settingsTheme])

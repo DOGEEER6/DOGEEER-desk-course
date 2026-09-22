@@ -8,7 +8,7 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 export const MAIN_THEME_KEY = 'lumen-theme'
 export const MINI_THEME_KEY = 'lumen-mini-theme'
 
-let current: ThemeMode = 'dark'
+let current: ThemeMode = 'light'
 
 function systemDark(): boolean {
   try {
@@ -73,7 +73,7 @@ function read(key: string, fallback: ThemeMode): ThemeMode {
  * @param key      存储键（主窗口 / 浮窗各一份）
  * @param fallback 没存过时的默认值 —— 产品默认**深色**
  */
-export function initTheme(key: string = MAIN_THEME_KEY, fallback: ThemeMode = 'dark'): ThemeMode {
+export function initTheme(key: string = MAIN_THEME_KEY, fallback: ThemeMode = 'light'): ThemeMode {
   const mode = read(key, fallback)
   applyTheme(mode)
   try {
