@@ -4,6 +4,96 @@
 
 <img src="src-tauri/icons/icon.png" width="88" alt="DOGEEER 课表图标" />
 
+## 界面预览
+
+> 下面的截图由 `node scripts/make-screenshots.mjs` 自动生成（注入真实课表数据后逐屏拍摄）。
+
+**主页 · 周视图** —— 顶部是当前/下一节课与待办卡片，下方是整周课表（默认浅色主题）
+
+![主页周视图](docs/screenshots/01-home-week.png)
+
+**待办与作业（展开）** —— 支持备注详情、二次编辑、勾选完成自动归档
+
+![待办展开](docs/screenshots/02-home-todo.png)
+
+<table>
+<tr>
+<td width="50%">
+
+**课程详情 · 备忘录**
+![课程备忘录](docs/screenshots/03-course-notes.png)
+
+</td>
+<td width="50%">
+
+**课程详情 · 作业**
+![课程作业](docs/screenshots/04-course-homework.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**手动添加课程**（逐周选择 + 网格拖选时段）
+![添加课程](docs/screenshots/05-add-course.png)
+
+</td>
+<td width="50%">
+
+**添加待办**（内容 / 排期 / DDL / 备注）
+![添加待办](docs/screenshots/06-add-todo.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**学期视图**（周 × 星期热力矩阵 + 课程清单）
+![学期视图](docs/screenshots/07-term-view.png)
+
+</td>
+<td width="50%">
+
+**导入 Excel 课表**（自动识别网格表 / 清单表）
+![导入课表](docs/screenshots/08-import-excel.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**设置 · 学期与提醒**
+![设置](docs/screenshots/09-settings.png)
+
+</td>
+<td width="50%">
+
+**设置 · 桌面浮窗与数据**
+![设置桌面浮窗](docs/screenshots/10-settings-widget.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**深色主题**
+![深色主题](docs/screenshots/11-dark-theme.png)
+
+</td>
+<td width="50%">
+
+**桌面浮窗**（深色玻璃，透出桌面）
+![浮窗深色](docs/screenshots/13-mini-dark.png)
+
+</td>
+</tr>
+</table>
+
+**桌面浮窗 · 浅色**
+
+![浮窗浅色](docs/screenshots/12-mini-light.png)
+
+
 ## 功能
 
 | | 能力 |
@@ -12,7 +102,7 @@
 | 🪟 **原生材质** | 浮窗使用 Windows 11 的 **Mica** 亚克力材质 + 半透明卡片（0.72 不透明度），真正透出桌面背景 |
 | ➕ **手动添加课程** | 左侧栏一键「添加课程」：名称 / 教师 / 地点 / 学分 / 11 色配色 / **逐周勾选周次（含单双周）** / 在 7×13 网格上按住拖动选时段。创建后进入「**未排课时段**」托盘，**拖到课表任意位置自动吸附**完成排课 |
 | 🔒 **单实例** | 重复双击不会开出第二个实例：已运行时会把主窗口唤到前台 |
-| 📅 **三种课表视图** | **周视图**（可拖动的网格）/ **月视图**（7 列卡片，按天列课）/ **学期视图**（周 × 星期热力矩阵 + 课程清单 + 学期进度），学期视图点某一周可直接跳到周视图 |
+| 📅 **两种课表视图** | **周视图**（可拖动改课的网格）/ **学期视图**（周 × 星期热力矩阵 + 课程清单 + 学期进度），学期视图点某一周可直接跳到周视图 |
 | 🪟 **自绘窗口** | 去掉 Windows 原生标题栏，把**最小化 / 最大化 / 关闭**融进页面顶部（整条标题栏可拖动窗口） |
 | 🌗 **浅色 / 深色主题** | **默认浅色**，可在设置里改为深色或跟随系统；整套颜色走 CSS 变量。浮窗跟随主界面主题 |
 | ✅ **待办闭环** | 勾选完成 → 打勾动画 → 自动**归档**；归档页可一键恢复或清空；删除与完成都有**撤销** |
