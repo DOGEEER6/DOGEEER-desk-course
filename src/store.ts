@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
   AppSettings,
   Course,
@@ -20,6 +20,21 @@ export type SessionInput = Partial<Session> & Pick<Session, 'day' | 'startPeriod
 export const uid = (prefix = 'id') =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 
+/**
+ * 「这节课已上完」的标记键。
+ *
+ * 必须带上日期：同一个 session 覆盖很多周，如果只用 courseId+sessionId，
+ * 勾一次就会把之后的每一周都变成已完成。带上日期后每个「课次」独立，
+ * 下周同一节课自然是未完成状态。
+ */
+export function classDoneKey(courseId: string, sessionId: string, date: Date | string = new Date()): string {
+  const d = typeof date === 'string' ? date.slice(0, 10) : dateKey(date)
+  return `${d}|${courseId}|${sessionId}`
+}
+
+/** 保留多少天的「已上完」记录（更早的自动清理，避免 localStorage 无限增长） */
+export const CLASS_DONE_KEEP_DAYS = 21
+
 /** 默认学期开始：本周周一 */
 function defaultSemesterStart(): string {
   return dateKey(mondayOf(new Date()))
@@ -38,8 +53,6 @@ export const defaultSettings: AppSettings = {
   tickSeconds: 30,
   /** 浮窗默认「在桌面上即可」，不抢占最前 */
   miniAlwaysOnTop: false,
-  /** 浮窗默认固定深色，不跟随主界面 */
-  miniFollowTheme: false,
   /** 默认浅色 */
   theme: 'light',
 }
@@ -50,6 +63,11 @@ interface AppState {
   periods: PeriodSlot[]
   settings: AppSettings
   lastImport?: ImportReport
+  /**
+   * 已上完的课次：key = `YYYY-MM-DD|courseId|sessionId`（见 classDoneKey）。
+   * 必须持久化，否则重启后会全部变回未完成。
+   */
+  doneClasses: Record<string, true>
 
   // ---- UI（不持久化） ----
   view: ViewKey
@@ -96,6 +114,21 @@ interface AppState {
   clearArchived: () => void
   clearCompleted: () => void
 
+  /** 勾选 / 取消「这节课已上完」（按日期记录的课次） */
+  toggleClassDone: (courseId: string, sessionId: string, date?: Date | string) => void
+  /** 设置某一课次的完成状态（幂等，跨窗口同步时更安全） */
+  setClassDone: (courseId: string, sessionId: string, done: boolean, date?: Date | string) => void
+  /** 丢弃超过 CLASS_DONE_KEEP_DAYS 天的旧记录 */
+  pruneClassDone: () => void
+  /**
+   * 启动自愈（幂等）：
+   *  1. 把「已完成但未归档」的待办补归档 —— 勾选后要等 900ms 才归档，
+   *     如果这期间退出了应用，就会留下 done=true 且 archived=false 的孤儿待办，
+   *     而进行中列表过滤 !done、归档列表过滤 archived，两边都看不到它。
+   *  2. 清理过期的「已上完」记录。
+   */
+  normalizeOnStartup: () => void
+
   setPeriods: (p: PeriodSlot[]) => void
   updateSettings: (patch: Partial<AppSettings>) => void
   updateReminders: (patch: Partial<AppSettings['reminders']>) => void
@@ -106,6 +139,7 @@ interface AppState {
     todos: Todo[]
     periods?: PeriodSlot[]
     settings?: AppSettings
+    doneClasses?: Record<string, true>
   }) => void
   setImportReport: (r: ImportReport) => void
   resetAll: () => void
@@ -148,6 +182,45 @@ function normalizeCourse(c: CourseInput): Course {
   }
 }
 
+/** 主窗口与浮窗共用的 localStorage key */
+export const PERSIST_KEY = 'lumen-course-v1'
+
+/** 真正落盘的那部分状态 */
+interface PersistedState {
+  courses: Course[]
+  todos: Todo[]
+  periods: PeriodSlot[]
+  settings: AppSettings
+  lastImport?: ImportReport
+  doneClasses: Record<string, true>
+}
+
+/**
+ * 最近一次读到的原始字符串。
+ *
+ * 两个 WebView 各有一份独立 store，靠轮询把对方写的数据拉过来。
+ * 如果每次轮询都无条件 rehydrate，zustand 会生成新对象 → 主界面每 2.5 秒
+ * 整体重渲染一次（动画、滚动都会被打断）。比较原始字符串后，
+ * 只有「确实被另一个窗口改过」时才 rehydrate。
+ */
+let lastRaw: string | null | undefined
+
+const sharedStorage = createJSONStorage<PersistedState>(() => ({
+  getItem: (name: string) => {
+    const v = localStorage.getItem(name)
+    if (name === PERSIST_KEY) lastRaw = v
+    return v
+  },
+  setItem: (name: string, value: string) => {
+    localStorage.setItem(name, value)
+    if (name === PERSIST_KEY) lastRaw = value
+  },
+  removeItem: (name: string) => {
+    localStorage.removeItem(name)
+    if (name === PERSIST_KEY) lastRaw = null
+  },
+}))
+
 export const useApp = create<AppState>()(
   persist(
     (set, get) => ({
@@ -156,6 +229,7 @@ export const useApp = create<AppState>()(
       periods: DEFAULT_PERIODS,
       settings: defaultSettings,
       lastImport: undefined,
+      doneClasses: {},
 
       view: 'timetable',
       previewWeek: null,
@@ -353,9 +427,18 @@ export const useApp = create<AppState>()(
           ),
         })),
 
+      /**
+       * 从归档恢复到「进行中」。
+       *
+       * 必须同时清掉 done：只看 archived=false 的话，todo 会变成
+       * 「已完成但未归档」，而进行中列表过滤 !done、归档列表过滤 archived，
+       * 两边都不显示 —— 点一下「恢复」待办就凭空消失了。
+       */
       restoreTodo: (id) =>
         set((s) => ({
-          todos: s.todos.map((t) => (t.id === id ? { ...t, archived: false } : t)),
+          todos: s.todos.map((t) =>
+            t.id === id ? { ...t, archived: false, done: false, completedAt: undefined } : t,
+          ),
         })),
 
       clearArchived: () => set((s) => ({ todos: s.todos.filter((t) => !t.archived) })),
@@ -363,6 +446,55 @@ export const useApp = create<AppState>()(
       removeTodo: (id) => set((s) => ({ todos: s.todos.filter((t) => t.id !== id) })),
 
       clearCompleted: () => set((s) => ({ todos: s.todos.filter((t) => !(t.done && t.archived)) })),
+
+      setClassDone: (courseId, sessionId, done, date) =>
+        set((s) => {
+          const key = classDoneKey(courseId, sessionId, date)
+          const has = !!s.doneClasses[key]
+          if (has === done) return s
+          const next = { ...s.doneClasses }
+          if (done) next[key] = true
+          else delete next[key]
+          return { doneClasses: next }
+        }),
+
+      toggleClassDone: (courseId, sessionId, date) =>
+        set((s) => {
+          const key = classDoneKey(courseId, sessionId, date)
+          const next = { ...s.doneClasses }
+          if (next[key]) delete next[key]
+          else next[key] = true
+          return { doneClasses: next }
+        }),
+
+      pruneClassDone: () =>
+        set((s) => {
+          const keys = Object.keys(s.doneClasses)
+          if (keys.length === 0) return s
+          const cutoff = dateKey(addDays(new Date(), -CLASS_DONE_KEEP_DAYS))
+          const kept = keys.filter((k) => k.slice(0, 10) >= cutoff)
+          if (kept.length === keys.length) return s
+          const next: Record<string, true> = {}
+          for (const k of kept) next[k] = true
+          return { doneClasses: next }
+        }),
+
+      normalizeOnStartup: () =>
+        set((s) => {
+          const todos = s.todos.map((t) =>
+            t.done && !t.archived
+              ? { ...t, archived: true, completedAt: t.completedAt ?? new Date().toISOString() }
+              : t,
+          )
+          const todosChanged = todos.some((t, i) => t !== s.todos[i])
+          const cutoff = dateKey(addDays(new Date(), -CLASS_DONE_KEEP_DAYS))
+          const keys = Object.keys(s.doneClasses)
+          const kept = keys.filter((k) => k.slice(0, 10) >= cutoff)
+          if (!todosChanged && kept.length === keys.length) return s
+          const doneClasses: Record<string, true> = {}
+          for (const k of kept) doneClasses[k] = true
+          return { todos, doneClasses }
+        }),
 
       setPeriods: (p) => set({ periods: [...p].sort((a, b) => a.index - b.index) }),
 
@@ -375,11 +507,13 @@ export const useApp = create<AppState>()(
         set((s) => ({ settings: { ...s.settings, semester: { ...s.settings.semester, ...patch } } })),
 
       replaceAll: (data) =>
-        set(() => ({
+        set((s) => ({
           courses: data.courses.map((c) => normalizeCourse(c)),
           todos: data.todos ?? [],
           periods: data.periods && data.periods.length ? data.periods : DEFAULT_PERIODS,
           settings: data.settings ? { ...defaultSettings, ...data.settings } : defaultSettings,
+          // 备份里带了就一起恢复，没带（旧版本备份）就保留现有记录
+          doneClasses: data.doneClasses ?? s.doneClasses,
           selectedCourseId: null,
         })),
 
@@ -396,19 +530,22 @@ export const useApp = create<AppState>()(
           periods: DEFAULT_PERIODS,
           settings: { ...defaultSettings, semester: { startDate: defaultSemesterStart(), totalWeeks: 16 } },
           lastImport: undefined,
+          doneClasses: {},
           selectedCourseId: null,
           previewWeek: null,
         }),
     }),
     {
-      name: 'lumen-course-v1',
+      name: PERSIST_KEY,
       version: 1,
-      partialize: (s) => ({
+      storage: sharedStorage,
+      partialize: (s): PersistedState => ({
         courses: s.courses,
         todos: s.todos,
         periods: s.periods,
         settings: s.settings,
         lastImport: s.lastImport,
+        doneClasses: s.doneClasses,
       }),
     },
   ),
@@ -436,12 +573,21 @@ export type { AppState }
  * 重新从 localStorage 读取持久化状态。
  *
  * 主窗口与浮窗是两个 WebView，各自有独立的 zustand 实例：
- * 主窗口写 localStorage 时，浮窗的内存状态不会自动更新
- * （所以之前"改了待办，浮窗没反应"）。浮窗需要在 storage 事件 /
+ * 一边写 localStorage 时，另一边的内存状态不会自动更新
+ * （所以之前"改了待办，浮窗没反应"，反过来 "浮窗勾了课，
+ *  主窗口一操作就把勾覆盖掉了"）。两边都必须在 storage 事件 /
  * 获得焦点 / 定时轮询时调用它把数据拉过来。
+ *
+ * 默认只在原始字符串真的变了才 rehydrate，避免每 2.5 秒
+ * 无意义地重建一次状态（会让主界面整体重渲染）。
  */
-export function rehydrateFromStorage(): void {
+export function rehydrateFromStorage(force = false): void {
   try {
+    if (!force) {
+      const raw = localStorage.getItem(PERSIST_KEY)
+      if (raw === lastRaw) return
+      lastRaw = raw
+    }
     const api = useApp as unknown as { persist?: { rehydrate?: () => Promise<void> | void } }
     if (api.persist?.rehydrate) void api.persist.rehydrate()
   } catch {

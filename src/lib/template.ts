@@ -72,6 +72,8 @@ export interface BackupFile {
   todos: Todo[]
   periods: PeriodSlot[]
   settings: unknown
+  /** 「已上完」的课次记录（旧备份可能没有这个字段） */
+  doneClasses?: Record<string, true>
 }
 
 export function exportBackup(data: Omit<BackupFile, 'app' | 'version' | 'exportedAt'>) {

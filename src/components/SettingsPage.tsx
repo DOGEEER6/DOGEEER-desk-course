@@ -32,6 +32,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
   const replaceAll = useApp((s) => s.replaceAll)
   const resetAll = useApp((s) => s.resetAll)
   const lastImport = useApp((s) => s.lastImport)
+  const doneClasses = useApp((s) => s.doneClasses)
 
   const [perm, setPerm] = useState<PermissionState | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -426,7 +427,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
             <button
               className="btn btn-ghost h-9 px-4 text-[12.5px]"
               onClick={() => {
-                exportBackup({ courses, todos, periods, settings })
+                exportBackup({ courses, todos, periods, settings, doneClasses })
                 toast('已导出备份', { tone: 'success' })
               }}
             >
@@ -451,6 +452,7 @@ export function SettingsPage({ onOpenImport }: { onOpenImport: () => void }) {
                       todos: data.todos,
                       periods: data.periods,
                       settings: data.settings as never,
+                      doneClasses: data.doneClasses,
                     })
                     toast('备份已恢复', { desc: `${data.courses.length} 门课程`, tone: 'success' })
                   } catch (err) {

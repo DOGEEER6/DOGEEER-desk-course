@@ -204,7 +204,9 @@ export function TodoPanel({
     playChime('done')
     setJustDone((s) => new Set(s).add(t.id))
     window.setTimeout(() => {
-      useApp.getState().archiveTodo(t.id)
+      // 用户可能已经点了「撤销」：那时 done 已被清掉，这里就不能再归档
+      const cur = useApp.getState().todos.find((x) => x.id === t.id)
+      if (cur?.done && !cur.archived) useApp.getState().archiveTodo(t.id)
       setJustDone((s) => {
         const n = new Set(s)
         n.delete(t.id)

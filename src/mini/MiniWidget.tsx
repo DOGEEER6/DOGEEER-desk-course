@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import clsx from 'clsx'
-import { useApp } from '../store'
+import { useApp, classDoneKey, rehydrateFromStorage, PERSIST_KEY } from '../store'
 import type { Course, Todo, Weekday } from '../types'
 import { WEEKDAY_FULL } from '../types'
 import { colorOf } from '../lib/palette'
@@ -29,7 +29,6 @@ import {
 } from '../lib/desktop'
 import { playChime } from '../lib/notify'
 import { applyTheme, MINI_THEME_KEY } from '../lib/theme'
-import { rehydrateFromStorage } from '../store'
 
 /* ---------------- 窗口位置/大小持久化 ---------------- */
 
@@ -102,21 +101,18 @@ export default function MiniWidget() {
   const settings = useApp((s) => s.settings)
   const miniPinned = useApp((s) => s.settings.miniAlwaysOnTop)
   const toggleTodo = useApp((s) => s.toggleTodo)
+  /** 「已上完」标记存在 store 里（会持久化 + 跨窗口同步），不再是组件内部 state */
+  const doneClasses = useApp((s) => s.doneClasses)
+  const toggleClassDoneInStore = useApp((s) => s.toggleClassDone)
+  const normalizeOnStartup = useApp((s) => s.normalizeOnStartup)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [doneClasses, setDoneClasses] = useState<Set<string>>(new Set())
   const [justDone, setJustDone] = useState<Set<string>>(new Set())
   const restored = useRef(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
-  /** 勾掉一节课（表示已上完） */
+  /** 勾掉一节课（表示已上完）：按「日期 + 课程 + 课次」记录，重启后仍是勾选状态 */
   const toggleClassDone = (courseId: string, sessionId: string) => {
-    const key = `${courseId}-${sessionId}`
-    setDoneClasses((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+    toggleClassDoneInStore(courseId, sessionId, now)
   }
 
   /** 勾掉一条作业：先显示打勾，再收进归档（与主界面一致） */
@@ -129,7 +125,9 @@ export default function MiniWidget() {
     playChime('done')
     setJustDone((s) => new Set(s).add(id))
     window.setTimeout(() => {
-      useApp.getState().archiveTodo(id)
+      // 撤销后 done 会被清掉，这里就不要再归档
+      const cur = useApp.getState().todos.find((x) => x.id === id)
+      if (cur?.done && !cur.archived) useApp.getState().archiveTodo(id)
       setJustDone((s) => {
         const n = new Set(s)
         n.delete(id)
@@ -266,12 +264,17 @@ export default function MiniWidget() {
     void setMiniClickThrough(!!miniPinned)
   }, [miniPinned])
 
+  /* 启动自愈：补归档「已完成但未归档」的孤儿待办 + 清理过期的「已上完」记录 */
+  useEffect(() => {
+    normalizeOnStartup()
+  }, [normalizeOnStartup])
+
   /* 跨窗口数据同步：主窗口改了待办/课程，浮窗要把数据拉过来。
      两个 WebView 各有独立 store，光靠 localStorage 写入不会自动更新内存状态。 */
   useEffect(() => {
     const pull = () => rehydrateFromStorage()
     const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key === 'lumen-course-v1') pull()
+      if (e.key === null || e.key === PERSIST_KEY) pull()
     }
     window.addEventListener('storage', onStorage)
     window.addEventListener('focus', pull)
@@ -425,7 +428,7 @@ export default function MiniWidget() {
               const isCurrent = current?.course.id === r.course.id && current?.startPeriod === r.startPeriod
               const key = `${r.course.id}-${r.startPeriod}`
               const isOpen = expanded === key
-              const classDone = doneClasses.has(`${r.course.id}-${r.sessionId}`)
+              const classDone = !!doneClasses[classDoneKey(r.course.id, r.sessionId, now)]
               const undone = r.todos.filter((t) => !t.done)
               return (
                 <div
@@ -448,6 +451,7 @@ export default function MiniWidget() {
                         background: classDone ? '#34C759' : isCurrent ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.55)',
                       }}
                       data-testid={`mini-done-${r.course.id}-${r.startPeriod}`}
+                      data-done={classDone}
                       onClick={() => toggleClassDone(r.course.id, r.sessionId)}
                       title={classDone ? '取消「已上完」标记' : '标记这节课已上完'}
                       aria-label={classDone ? '取消已完成' : '标记已完成'}

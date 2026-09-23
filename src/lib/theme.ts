@@ -1,7 +1,7 @@
 /**
  * 主题：浅色 / 深色 / 跟随系统。
- * 主窗口与浮窗各自独立存储（生产环境下两者是不同 origin），
- * 但主窗口会把选择广播给浮窗，保证观感一致。
+ * 主窗口与浮窗同源（共用 localStorage），但各存一份 key；
+ * 主窗口切换时会顺带更新浮窗的那份，保证观感一致。
  */
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -71,7 +71,7 @@ function read(key: string, fallback: ThemeMode): ThemeMode {
 /**
  * 入口调用一次。
  * @param key      存储键（主窗口 / 浮窗各一份）
- * @param fallback 没存过时的默认值 —— 产品默认**深色**
+ * @param fallback 没存过时的默认值 —— 产品默认**浅色**
  */
 export function initTheme(key: string = MAIN_THEME_KEY, fallback: ThemeMode = 'light'): ThemeMode {
   const mode = read(key, fallback)

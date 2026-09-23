@@ -129,12 +129,8 @@ export interface AppSettings {
   tickSeconds: number
   /** 浮窗是否固定在桌面最前 */
   miniAlwaysOnTop: boolean
-  /** 浮窗是否跟随主界面的深浅色（默认关，浮窗固定深色） */
-  miniFollowTheme?: boolean
   /** 主题：跟随系统 / 浅色 / 深色 */
   theme?: 'system' | 'light' | 'dark'
-  /** 浮窗开机自启 */
-  miniAutoStart?: boolean
 }
 
 export interface ImportReportRow {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
-import { useApp, currentWeek, dateOfWeekDay } from './store'
+import { useApp, currentWeek, dateOfWeekDay, rehydrateFromStorage, PERSIST_KEY } from './store'
 import type { Weekday } from './types'
 import { useNow, useReminderEngine, useTodayClasses } from './hooks'
 import { Timetable } from './components/Timetable'
@@ -138,6 +138,36 @@ export default function App() {
       unlisten?.()
     }
   }, [openTodoDialog])
+
+  /* ---------------- 启动自愈 ----------------
+     上次退出时可能停在「已完成但还没归档」的中间态（勾选后 900ms 才归档），
+     这种待办在进行中和归档两个列表里都看不到，启动时补归档。 */
+  const normalizeOnStartup = useApp((s) => s.normalizeOnStartup)
+  useEffect(() => {
+    normalizeOnStartup()
+  }, [normalizeOnStartup])
+
+  /* ---------------- 跨窗口数据同步 ----------------
+     浮窗也是独立 WebView + 独立 store。浮窗里勾掉的课、勾掉的作业
+     只写到 localStorage，主窗口内存里还是旧数据；主窗口随后任一次
+     操作都会把旧数据整体写回去，把浮窗的改动覆盖掉。
+     所以两个窗口都要在 storage 事件 / 重新聚焦 / 定时轮询时把数据拉过来。 */
+  useEffect(() => {
+    const pull = () => rehydrateFromStorage()
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === PERSIST_KEY) pull()
+    }
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('focus', pull)
+    document.addEventListener('visibilitychange', pull)
+    const timer = window.setInterval(pull, 2500)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', pull)
+      document.removeEventListener('visibilitychange', pull)
+      window.clearInterval(timer)
+    }
+  }, [])
 
   /* ---------------- 快捷键 ---------------- */
   useEffect(() => {
