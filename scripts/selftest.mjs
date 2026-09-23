@@ -13,8 +13,8 @@ const root = resolve(__dirname, '..')
 const out = join(root, 'node_modules', '.cache', 'lumen-selftest')
 mkdirSync(out, { recursive: true })
 
-async function load(entry) {
-  const outfile = join(out, `${entry.replace(/[\\/]/g, '_')}.mjs`)
+async function load(entry, tag = '') {
+  const outfile = join(out, `${entry.replace(/[\\/]/g, '_')}${tag}.mjs`)
   await build({
     entryPoints: [resolve(root, entry)],
     outfile,
@@ -209,6 +209,96 @@ if (file) {
   check('节次区间合法', res.records.every((r) => r.startPeriod >= 1 && r.endPeriod >= r.startPeriod))
 } else {
   console.log('\n(未提供 xlsx 路径，跳过文件解析测试)')
+}
+
+/* ---------------- store.ts：持久化 ----------------
+   回归：浮窗里勾掉的「已上完」原来只存在组件 useState 里，重启全部丢失。
+   这里用假的 localStorage 直接验证「写入 → 重新加载模块 → 状态还在」。 */
+console.log('\n[store 持久化]')
+{
+  const mem = new Map()
+  globalThis.localStorage = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => void mem.set(k, String(v)),
+    removeItem: (k) => void mem.delete(k),
+    clear: () => mem.clear(),
+    key: (i) => [...mem.keys()][i] ?? null,
+    get length() {
+      return mem.size
+    },
+  }
+  globalThis.window = globalThis.window ?? { addEventListener() {}, removeEventListener() {} }
+
+  const KEY = 'lumen-course-v1'
+  const readState = () => {
+    try {
+      return JSON.parse(mem.get(KEY) ?? 'null')?.state ?? null
+    } catch {
+      return null
+    }
+  }
+
+  const s1 = await load('src/store.ts')
+  const first = s1.useApp.getState()
+  check('初始「已上完」为空', Object.keys(first.doneClasses).length === 0)
+
+  const d1 = new Date(2026, 2, 2) // 2026-03-02
+  const d2 = new Date(2026, 2, 9) // 下一周
+  first.toggleClassDone('crs_a', 'ses_1', d1)
+  const k1 = s1.classDoneKey('crs_a', 'ses_1', d1)
+  check('键 = 日期|课程|课次', k1 === '2026-03-02|crs_a|ses_1', k1)
+  check('同课次不同日期 → 不同键', s1.classDoneKey('crs_a', 'ses_1', d2) !== k1)
+  check('勾选后立即写入 localStorage', !!readState()?.doneClasses?.[k1], JSON.stringify(readState()?.doneClasses))
+
+  // 重新加载模块 = 重启应用（同一个 localStorage）
+  const s2 = await load('src/store.ts', '_restart')
+  const reopened = s2.useApp.getState()
+  check('重启后勾选状态仍在', reopened.doneClasses[k1] === true, JSON.stringify(reopened.doneClasses))
+  check('重启后其它字段也在', Array.isArray(reopened.courses) && !!reopened.settings)
+
+  // 取消勾选也要落盘
+  reopened.toggleClassDone('crs_a', 'ses_1', d1)
+  check('取消勾选后从存储里移除', !readState()?.doneClasses?.[k1])
+
+  // 跨窗口：另一个窗口写了新值，rehydrate 必须能拉过来
+  const remoteKey = '2026-03-02|crs_b|ses_9'
+  mem.set(KEY, JSON.stringify({ state: { ...readState(), doneClasses: { [remoteKey]: true } }, version: 1 }))
+  s2.rehydrateFromStorage(true)
+  check('rehydrate 拉到另一个窗口写入的勾选', s2.useApp.getState().doneClasses[remoteKey] === true)
+
+  // 过期清理：只保留最近三周
+  const st = s2.useApp.getState()
+  st.toggleClassDone('crs_c', 'ses_3', new Date())
+  st.toggleClassDone('crs_c', 'ses_4', new Date(2000, 0, 1))
+  s2.useApp.getState().pruneClassDone()
+  const after = readState()?.doneClasses ?? {}
+  check('过期记录被清理', after['2000-01-01|crs_c|ses_4'] === undefined, JSON.stringify(Object.keys(after)))
+  check('近期记录被保留', !!after[s2.classDoneKey('crs_c', 'ses_3')])
+
+  /* ---- 待办：归档 / 恢复 / 撤销的状态机 ----
+     进行中列表过滤 !done，归档列表过滤 archived。
+     只要出现「done=true 且 archived=false」，待办就会在两个列表里都消失。 */
+  const st2 = s2.useApp.getState()
+  st2.addTodo({ id: 'td_1', title: '测试待办' })
+  const find = () => s2.useApp.getState().todos.find((x) => x.id === 'td_1')
+  check('新建待办默认未完成未归档', find().done === false && find().archived === false)
+  s2.useApp.getState().archiveTodo('td_1')
+  check('归档后 done 与 archived 都为真', find().done === true && find().archived === true)
+  s2.useApp.getState().restoreTodo('td_1')
+  const t1 = find()
+  check('恢复归档后 archived=false', t1.archived === false)
+  check('恢复归档后 done 也被清掉', t1.done === false, `done=${t1.done}`)
+
+  // 退出时卡在「已完成但还没归档」→ 启动自愈必须补归档
+  s2.useApp.getState().toggleTodo('td_1', true)
+  s2.useApp.getState().normalizeOnStartup()
+  const t2 = find()
+  check('孤儿「已完成」被启动自愈归档', t2.archived === true && t2.done === true)
+
+  // 撤销：勾选后立刻恢复，延迟归档不能再把它收走
+  s2.useApp.getState().restoreTodo('td_1')
+  const t3 = find()
+  check('撤销后回到未完成未归档（延迟归档被拦下）', t3.done === false && t3.archived === false)
 }
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项失败` : '✅ 全部通过'}`)

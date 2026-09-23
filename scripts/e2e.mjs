@@ -604,6 +604,41 @@ await new Promise((r) => setTimeout(r, 900))
 check('归档页可查看已完成', /已完成/.test(await evaluate(`return document.body.innerText`)))
 await shot('12-archive-tab')
 
+/* 「恢复」必须真的回到进行中。
+   曾经只把 archived 置 false、done 留着不动 → 进行中列表过滤 !done、
+   归档列表过滤 archived，待办两边都不显示，相当于点一下就消失了。 */
+const restored = await evaluate(`
+  const b = document.querySelector('button[aria-label="恢复"]');
+  if (!b) return 'no-button';
+  const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+  const target = s.state.todos.find(t => t.archived);
+  b.click();
+  return target ? target.id : 'ok';
+`)
+await new Promise((r) => setTimeout(r, 900))
+if (restored !== 'no-button') {
+  const back = await evaluate(`
+    const s = JSON.parse(localStorage.getItem('lumen-course-v1'));
+    const t = s.state.todos.find(x => x.id === ${JSON.stringify(String(restored))});
+    const open = s.state.todos.filter(x => !x.archived && !x.done).length;
+    return t ? JSON.stringify({ done: t.done, archived: t.archived, open }) : 'missing';
+  `)
+  const b = JSON.parse(String(back))
+  check('恢复后既未完成也未归档', b.done === false && b.archived === false, String(back))
+  await evaluate(`
+    Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().startsWith('进行中'))?.click();
+    return 'ok';
+  `)
+  await new Promise((r) => setTimeout(r, 800))
+  check(
+    '恢复后的待办回到「进行中」列表',
+    await evaluate(`return !!document.querySelector('[data-testid="todo-edit-${String(restored)}"]')`),
+    `id=${restored}`,
+  )
+} else {
+  check('归档里有可恢复的待办', false, '未找到恢复按钮')
+}
+
 // 主题切换
 const setTheme = (mode) =>
   evaluate(`
@@ -724,6 +759,51 @@ if (miniTarget) {
   } else {
     check('浮窗有可勾选的待办', false, '未找到待办勾选框')
   }
+
+  /* ---- 「已上完」必须真正落盘 ----
+     曾经的 bug：勾选状态只存在组件的 useState 里，重启（或重载页面）后全部
+     变回未勾选。这里直接读 localStorage，再重载页面看勾选是否还在。 */
+  if (classToggle === 'ok') {
+    const persisted = await mev(`
+      const s = JSON.parse(localStorage.getItem('lumen-course-v1') || 'null');
+      const keys = Object.keys(s?.state?.doneClasses || {});
+      const marked = !!document.querySelector('[data-testid^="mini-done-"][data-done="true"]');
+      return JSON.stringify({ marked, n: keys.length, sample: keys[0] || '' });
+    `)
+    const p = JSON.parse(String(persisted))
+    check('浮窗勾选课程后写入了持久化存储', p.n >= 1, String(persisted))
+    check('持久化键含日期 + 课程 + 课次', /^\d{4}-\d{2}-\d{2}\|.+\|.+$/.test(p.sample), p.sample || '(空)')
+
+    await msend('Page.reload', { ignoreCache: false })
+    await new Promise((r) => setTimeout(r, 3200))
+    const after = JSON.parse(
+      String(
+        await mev(`
+          const s = JSON.parse(localStorage.getItem('lumen-course-v1') || 'null');
+          return JSON.stringify({
+            marked: !!document.querySelector('[data-testid^="mini-done-"][data-done="true"]'),
+            n: Object.keys(s?.state?.doneClasses || {}).length,
+          });
+        `),
+      ),
+    )
+    check('重载浮窗后「已上完」仍为勾选状态', after.marked === true, JSON.stringify(after))
+    check('重载浮窗后持久化记录未丢失', after.n >= 1, String(after.n))
+
+    /* 主窗口随后写一次本地存储，不能把浮窗勾的「已上完」覆盖掉。
+       两个 WebView 各有独立 store，主窗口写的是自己内存里的快照；
+       如果主窗口不同步（storage 事件 / 聚焦 / 轮询），这里就会丢。 */
+    await new Promise((r) => setTimeout(r, 3000))
+    await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); return 'ok';`)
+    await new Promise((r) => setTimeout(r, 900))
+    const kept = await evaluate(`
+      const s = JSON.parse(localStorage.getItem('lumen-course-v1') || 'null');
+      return Object.keys(s?.state?.doneClasses || {}).length;
+    `)
+    check('主窗口再次写入后「已上完」未被覆盖', Number(kept) >= 1, String(kept))
+    await new Promise((r) => setTimeout(r, 800))
+  }
+
   await mshot('20-mini')
   mws.close()
 }
